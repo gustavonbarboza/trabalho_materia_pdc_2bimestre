@@ -1,12 +1,14 @@
 """
-paralelizado.py — mesmos 4 filtros do serial.py, mas com N threads.
-Rodado para N = 2, 4, 6, 8, 12; exibe tabela de speedup ao final.
+paralelizado.py
+Roda os mesmos 4 filtros do serial.py, mas divide as linhas
+entre N threads. Cada rodada (2, 4, 6, 8, 12 threads) exibe
+os resultados completos + tempo, igual ao serial — só mais rápido.
 """
 import time
 import threading
 from collections import defaultdict
 
-CSV_FILE = 'tabela1092_2GB.csv'
+CSV_FILE      = 'tabela1092_2GB.csv'
 THREAD_COUNTS = [2, 4, 6, 8, 12]
 
 NUM_QUARTERS = 116
@@ -14,17 +16,17 @@ START_YEAR   = 1997
 NUM_YEARS    = 29
 
 STATE_REGIONS = {
-    'Rondônia': 'Norte',      'Acre': 'Norte',           'Amazonas': 'Norte',
-    'Roraima': 'Norte',       'Pará': 'Norte',            'Amapá': 'Norte',
+    'Rondônia': 'Norte',       'Acre': 'Norte',            'Amazonas': 'Norte',
+    'Roraima': 'Norte',        'Pará': 'Norte',             'Amapá': 'Norte',
     'Tocantins': 'Norte',
-    'Maranhão': 'Nordeste',   'Piauí': 'Nordeste',        'Ceará': 'Nordeste',
+    'Maranhão': 'Nordeste',    'Piauí': 'Nordeste',         'Ceará': 'Nordeste',
     'Rio Grande do Norte': 'Nordeste', 'Paraíba': 'Nordeste', 'Pernambuco': 'Nordeste',
-    'Alagoas': 'Nordeste',    'Sergipe': 'Nordeste',      'Bahia': 'Nordeste',
-    'Minas Gerais': 'Sudeste','Espírito Santo': 'Sudeste','Rio de Janeiro': 'Sudeste',
+    'Alagoas': 'Nordeste',     'Sergipe': 'Nordeste',       'Bahia': 'Nordeste',
+    'Minas Gerais': 'Sudeste', 'Espírito Santo': 'Sudeste', 'Rio de Janeiro': 'Sudeste',
     'São Paulo': 'Sudeste',
-    'Paraná': 'Sul',          'Santa Catarina': 'Sul',    'Rio Grande do Sul': 'Sul',
+    'Paraná': 'Sul',           'Santa Catarina': 'Sul',     'Rio Grande do Sul': 'Sul',
     'Mato Grosso do Sul': 'Centro-Oeste', 'Mato Grosso': 'Centro-Oeste',
-    'Goiás': 'Centro-Oeste',  'Distrito Federal': 'Centro-Oeste',
+    'Goiás': 'Centro-Oeste',   'Distrito Federal': 'Centro-Oeste',
 }
 
 # ─── Utilitários ──────────────────────────────────────────────────────────────
@@ -41,7 +43,7 @@ def parse_val(s):
 def quarter_col(q):
     return 3 + q * 24
 
-# ─── Leitura (idêntica ao serial) ─────────────────────────────────────────────
+# ─── Leitura (igual ao serial) ────────────────────────────────────────────────
 
 def ler_secoes():
     rows_abatidos = []
@@ -77,159 +79,171 @@ def ler_secoes():
 
     return rows_abatidos, rows_peso
 
-# ─── Workers (um por filtro, recebe fatia de linhas) ─────────────────────────
+# ─── Worker: cada thread roda os 4 filtros na sua fatia ───────────────────────
 
-def worker_abate_estado(rows, resultado, lock):
-    parcial = defaultdict(float)
-    for row in rows:
-        if row[0] == 'UF' and row[2] == 'Total':
+def worker(rows_ab, rows_pe, resultados, idx):
+    """
+    Cada thread recebe sua fatia de linhas e computa
+    resultados parciais dos 4 filtros de forma independente.
+    Sem Lock necessário — cada thread escreve no seu próprio índice.
+    """
+    r1 = defaultdict(float)   # filtro 1 — abate por estado
+    r2 = defaultdict(float)   # filtro 2 — evolução por ano
+    r3 = defaultdict(float)   # filtro 3 — peso por região
+    r4 = defaultdict(float)   # filtro 4 — tipo de inspeção
+
+    for row in rows_ab:
+        nivel = row[0].strip('"')
+        estado = row[1].strip('"')
+        insp  = row[2].strip('"')
+
+        # Filtro 1 — abate por estado (UF, inspeção Total)
+        if nivel == 'UF' and insp == 'Total':
             total = sum(parse_val(row[quarter_col(q)])
                         for q in range(NUM_QUARTERS) if quarter_col(q) < len(row))
-            parcial[row[1]] += total
-    with lock:
-        for k, v in parcial.items():
-            resultado[k] += v
+            r1[estado] += total
 
-def worker_evolucao(rows, resultado, lock):
-    parcial = defaultdict(float)
-    for row in rows:
-        if row[0] == 'BR' and row[2] == 'Total':
+        # Filtro 2 — evolução anual (Brasil, inspeção Total)
+        if nivel == 'BR' and insp == 'Total':
             for y in range(NUM_YEARS):
+                ano = START_YEAR + y
                 for q in range(4):
                     col = quarter_col(y * 4 + q)
                     if col < len(row):
-                        parcial[START_YEAR + y] += parse_val(row[col])
-    with lock:
-        for k, v in parcial.items():
-            resultado[k] += v
+                        r2[ano] += parse_val(row[col])
 
-def worker_peso_regiao(rows, resultado, lock):
-    parcial = defaultdict(float)
-    for row in rows:
-        if row[0] == 'UF' and row[2] == 'Total':
-            regiao = STATE_REGIONS.get(row[1])
+        # Filtro 4 — Federal × Estadual × Municipal (Brasil)
+        if nivel == 'BR' and insp in ('Federal', 'Estadual', 'Municipal'):
+            total = sum(parse_val(row[quarter_col(q)])
+                        for q in range(NUM_QUARTERS) if quarter_col(q) < len(row))
+            r4[insp] += total
+
+    for row in rows_pe:
+        nivel = row[0].strip('"')
+        estado = row[1].strip('"')
+        insp  = row[2].strip('"')
+
+        # Filtro 3 — peso por região (UF, inspeção Total)
+        if nivel == 'UF' and insp == 'Total':
+            regiao = STATE_REGIONS.get(estado)
             if regiao:
                 total = sum(parse_val(row[quarter_col(q)])
                             for q in range(NUM_QUARTERS) if quarter_col(q) < len(row))
-                parcial[regiao] += total
-    with lock:
-        for k, v in parcial.items():
-            resultado[k] += v
+                r3[regiao] += total
 
-def worker_inspecao(rows, resultado, lock):
-    parcial = defaultdict(float)
-    for row in rows:
-        if row[0] == 'BR' and row[2] in ('Federal', 'Estadual', 'Municipal'):
-            total = sum(parse_val(row[quarter_col(q)])
-                        for q in range(NUM_QUARTERS) if quarter_col(q) < len(row))
-            parcial[row[2]] += total
-    with lock:
-        for k, v in parcial.items():
-            resultado[k] += v
+    resultados[idx] = (r1, r2, r3, r4)
 
-# ─── Executor paralelo ────────────────────────────────────────────────────────
+# ─── Divisão e merge ──────────────────────────────────────────────────────────
 
 def dividir(lst, n):
-    """Divide lista em n fatias aproximadamente iguais."""
-    tam = len(lst)
-    inicio = 0
+    tam, inicio = len(lst), 0
     for i in range(n):
         fim = inicio + (tam - inicio) // (n - i)
         yield lst[inicio:fim]
         inicio = fim
 
-def rodar_paralelo(rows_ab, rows_pe, n_threads):
-    lock_1 = threading.Lock()
-    lock_2 = threading.Lock()
-    lock_3 = threading.Lock()
-    lock_4 = threading.Lock()
+def rodar_com_n_threads(rows_ab, rows_pe, n):
+    fatias_ab  = list(dividir(rows_ab, n))
+    fatias_pe  = list(dividir(rows_pe, n))
+    resultados = [None] * n
 
-    res1 = defaultdict(float)
-    res2 = defaultdict(float)
-    res3 = defaultdict(float)
-    res4 = defaultdict(float)
+    threads = [
+        threading.Thread(target=worker, args=(fatias_ab[i], fatias_pe[i], resultados, i))
+        for i in range(n)
+    ]
 
-    threads = []
+    for t in threads: t.start()
+    for t in threads: t.join()
 
-    fatias_ab = list(dividir(rows_ab, n_threads))
-    fatias_pe = list(dividir(rows_pe, n_threads))
+    # Merge: soma os dicionários parciais de cada thread
+    r1, r2, r3, r4 = (defaultdict(float) for _ in range(4))
+    for parcial in resultados:
+        p1, p2, p3, p4 = parcial
+        for k, v in p1.items(): r1[k] += v
+        for k, v in p2.items(): r2[k] += v
+        for k, v in p3.items(): r3[k] += v
+        for k, v in p4.items(): r4[k] += v
 
-    for i in range(n_threads):
-        threads.append(threading.Thread(target=worker_abate_estado,
-                                        args=(fatias_ab[i], res1, lock_1)))
-        threads.append(threading.Thread(target=worker_evolucao,
-                                        args=(fatias_ab[i], res2, lock_2)))
-        threads.append(threading.Thread(target=worker_peso_regiao,
-                                        args=(fatias_pe[i], res3, lock_3)))
-        threads.append(threading.Thread(target=worker_inspecao,
-                                        args=(fatias_ab[i], res4, lock_4)))
+    return r1, r2, r3, r4
 
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+# ─── Exibição (igual ao serial) ───────────────────────────────────────────────
 
-    return res1, res2, res3, res4
+def exibir_resultados(r1, r2, r3, r4):
+    # Filtro 1
+    print("\n  Filtro 1 — Abate por Estado")
+    print(f"  {'Estado':<25} {'Total de Cabeças':>20}  Rank")
+    print(f"  {'-'*25} {'-'*20}  ----")
+    for rank, (est, v) in enumerate(sorted(r1.items(), key=lambda x: -x[1]), 1):
+        print(f"  {est:<25} {v:>20,.0f}  #{rank}")
+
+    # Filtro 2
+    print("\n  Filtro 2 — Evolução Anual (Brasil)")
+    print(f"  {'Ano':>6}  {'Total de Cabeças':>20}  {'Var. s/ ano ant.':>16}")
+    print(f"  {'------':>6}  {'-'*20}  {'-'*16}")
+    anos = sorted(r2)
+    for i, ano in enumerate(anos):
+        v = r2[ano]
+        var = "    —" if i == 0 else f"{'+'if r2[ano]-r2[anos[i-1]]>=0 else ''}{r2[ano]-r2[anos[i-1]]:,.0f}"
+        print(f"  {ano:>6}  {v:>20,.0f}  {var:>16}")
+
+    # Filtro 3
+    print("\n  Filtro 3 — Peso Total por Região (kg)")
+    total_geral = sum(r3.values())
+    print(f"  {'Região':<15} {'Peso Total (kg)':>22}  {'% do Brasil':>12}")
+    print(f"  {'-'*15} {'-'*22}  {'-'*12}")
+    for reg, v in sorted(r3.items(), key=lambda x: -x[1]):
+        pct = (v / total_geral * 100) if total_geral else 0
+        print(f"  {reg:<15} {v:>22,.0f}  {pct:>11.1f}%")
+
+    # Filtro 4
+    print("\n  Filtro 4 — Federal × Estadual × Municipal (Brasil)")
+    total_insp = sum(r4.values())
+    print(f"  {'Inspeção':<12} {'Total de Cabeças':>22}  {'% do Total':>10}")
+    print(f"  {'-'*12} {'-'*22}  {'-'*10}")
+    for tipo, v in sorted(r4.items(), key=lambda x: -x[1]):
+        pct = (v / total_insp * 100) if total_insp else 0
+        print(f"  {tipo:<12} {v:>22,.0f}  {pct:>9.1f}%")
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    print("=" * 65)
+    print("=" * 62)
     print("   Análise Paralela (Threads) — Tabela 1092 IBGE")
-    print("=" * 65)
+    print("=" * 62)
 
-    print("\nLendo arquivo (leitura serial única)...")
+    print("\nLendo arquivo...")
     t_leit = time.perf_counter()
     rows_ab, rows_pe = ler_secoes()
     t_leit = time.perf_counter() - t_leit
     print(f"  {len(rows_ab):,} linhas (abatidos) | {len(rows_pe):,} linhas (peso)")
-    print(f"  Tempo de leitura: {t_leit:.2f}s\n")
+    print(f"  Tempo de leitura: {t_leit:.2f}s")
 
     tempos = {}
 
     for n in THREAD_COUNTS:
-        print(f"── {n} threads ──────────────────────────────────────────")
+        print(f"\n{'=' * 62}")
+        print(f"   Rodada com {n} threads")
+        print(f"{'=' * 62}")
+
         t0 = time.perf_counter()
-        res1, res2, res3, res4 = rodar_paralelo(rows_ab, rows_pe, n)
+        r1, r2, r3, r4 = rodar_com_n_threads(rows_ab, rows_pe, n)
         elapsed = time.perf_counter() - t0
         tempos[n] = elapsed
-        print(f"   Tempo de processamento: {elapsed:.4f}s")
 
-    # Referência: 1 thread (serial dos filtros, sem I/O)
-    print("\n── 1 thread (referência) ────────────────────────────────")
-    t0 = time.perf_counter()
-    rodar_paralelo(rows_ab, rows_pe, 1)
-    t_serial = time.perf_counter() - t0
-    print(f"   Tempo de processamento: {t_serial:.4f}s")
+        exibir_resultados(r1, r2, r3, r4)
+        print(f"\n  Tempo de processamento ({n} threads): {elapsed:.4f}s")
 
-    # ── Tabela de speedup ──
-    print("\n" + "=" * 65)
-    print(f"   {'Threads':>8}  {'Tempo (s)':>12}  {'Speedup':>10}")
-    print("   " + "-" * 36)
-    print(f"   {'1':>8}  {t_serial:>12.4f}  {'1.00x':>10}")
+    # ── Tabela de speedup ─────────────────────────────────────────
+    print(f"\n{'=' * 62}")
+    print("   Tabela de Speedup")
+    print(f"{'=' * 62}")
+    t_ref = tempos[THREAD_COUNTS[0]]   # referência = 2 threads
+    print(f"  {'Threads':>8}  {'Tempo (s)':>12}  {'Speedup':>10}")
+    print(f"  {'-'*8}  {'-'*12}  {'-'*10}")
     for n in THREAD_COUNTS:
-        sp = t_serial / tempos[n]
-        print(f"   {n:>8}  {tempos[n]:>12.4f}  {sp:>9.2f}x")
-    print("=" * 65)
-
-    # ── Exibe resultados do último run (12 threads) ──
-    res1, res2, res3, res4 = rodar_paralelo(rows_ab, rows_pe, 12)
-
-    print("\nFiltro 1 — Top 10 estados por abate:")
-    for est, v in sorted(res1.items(), key=lambda x: -x[1])[:10]:
-        print(f"  {est:<25} {v:>18,.0f}")
-
-    print("\nFiltro 2 — Evolução anual (Brasil):")
-    for ano in sorted(res2):
-        print(f"  {ano}: {res2[ano]:>18,.0f}")
-
-    print("\nFiltro 3 — Peso por região (kg):")
-    for reg, v in sorted(res3.items(), key=lambda x: -x[1]):
-        print(f"  {reg:<15} {v:>22,.0f}")
-
-    print("\nFiltro 4 — Federal × Estadual × Municipal:")
-    for tipo, v in sorted(res4.items(), key=lambda x: -x[1]):
-        print(f"  {tipo:<10} {v:>22,.0f}")
+        sp = t_ref / tempos[n]
+        print(f"  {n:>8}  {tempos[n]:>12.4f}  {sp:>9.2f}x")
+    print("=" * 62)
 
 if __name__ == '__main__':
     main()

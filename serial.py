@@ -145,9 +145,10 @@ def main():
     t = time.perf_counter()
     abate_estado = filtro_abate_por_estado(rows_ab)
     t1 = time.perf_counter() - t
-    top10 = sorted(abate_estado.items(), key=lambda x: -x[1])[:10]
-    for estado, v in top10:
-        print(f"      {estado:<25} {v:>18,.0f} cabeças")
+    print(f"      {'Estado':<25} {'Total de Cabeças':>20}  Rank")
+    print(f"      {'-'*25} {'-'*20}  ----")
+    for rank, (estado, v) in enumerate(sorted(abate_estado.items(), key=lambda x: -x[1]), 1):
+        print(f"      {estado:<25} {v:>20,.0f}  #{rank}")
     print(f"      Tempo: {t1:.4f}s")
 
     # ── Filtro 2 ──
@@ -155,8 +156,18 @@ def main():
     t = time.perf_counter()
     evolucao = filtro_evolucao_por_ano(rows_ab)
     t2 = time.perf_counter() - t
-    for ano in sorted(evolucao):
-        print(f"      {ano}: {evolucao[ano]:>18,.0f} cabeças")
+    print(f"      {'Ano':>6}  {'Total de Cabeças':>20}  {'Var. s/ ano ant.':>16}")
+    print(f"      {'------':>6}  {'-'*20}  {'-'*16}")
+    anos_ord = sorted(evolucao)
+    for i, ano in enumerate(anos_ord):
+        v = evolucao[ano]
+        if i == 0:
+            var = "    —"
+        else:
+            diff = v - evolucao[anos_ord[i - 1]]
+            sinal = "+" if diff >= 0 else ""
+            var = f"{sinal}{diff:,.0f}"
+        print(f"      {ano:>6}  {v:>20,.0f}  {var:>16}")
     print(f"      Tempo: {t2:.4f}s")
 
     # ── Filtro 3 ──
@@ -164,8 +175,12 @@ def main():
     t = time.perf_counter()
     peso_regiao = filtro_peso_por_regiao(rows_pe)
     t3 = time.perf_counter() - t
+    total_geral = sum(peso_regiao.values())
+    print(f"      {'Região':<15} {'Peso Total (kg)':>22}  {'% do Brasil':>12}")
+    print(f"      {'-'*15} {'-'*22}  {'-'*12}")
     for reg, v in sorted(peso_regiao.items(), key=lambda x: -x[1]):
-        print(f"      {reg:<15} {v:>22,.0f} kg")
+        pct = (v / total_geral * 100) if total_geral else 0
+        print(f"      {reg:<15} {v:>22,.0f}  {pct:>11.1f}%")
     print(f"      Tempo: {t3:.4f}s")
 
     # ── Filtro 4 ──
@@ -173,8 +188,12 @@ def main():
     t = time.perf_counter()
     inspecao = filtro_inspecao(rows_ab)
     t4 = time.perf_counter() - t
+    total_insp = sum(inspecao.values())
+    print(f"      {'Inspeção':<12} {'Total de Cabeças':>22}  {'% do Total':>10}")
+    print(f"      {'-'*12} {'-'*22}  {'-'*10}")
     for tipo, v in sorted(inspecao.items(), key=lambda x: -x[1]):
-        print(f"      {tipo:<10} {v:>22,.0f} cabeças")
+        pct = (v / total_insp * 100) if total_insp else 0
+        print(f"      {tipo:<12} {v:>22,.0f}  {pct:>9.1f}%")
     print(f"      Tempo: {t4:.4f}s")
 
     # ── Resumo ──

@@ -104,10 +104,36 @@ Executa cada etapa de forma sequencial:
       Tempo de leitura: 42.30s
 
 [2/5] Filtro 1 — Abate por Estado
-      Mato Grosso               1.234.567.890 cabeças
-      ...
+      Estado                    Total de Cabeças  Rank
+      ------------------------- --------------------  ----
+      Mato Grosso                    1.234.567.890  #1
+      São Paulo                        987.654.321  #2
+      ... (todos os 27 estados)
       Tempo: 0.8321s
-...
+
+[3/5] Filtro 2 — Evolução Anual (Brasil)
+      Ano    Total de Cabeças  Var. s/ ano ant.
+      ------  --------------------  ----------------
+      1997          45.123.456             —
+      1998          47.890.123     +2.766.667
+      ... (todos os 29 anos)
+      Tempo: 0.0012s
+
+[4/5] Filtro 3 — Peso Total por Região (kg)
+      Região          Peso Total (kg)  % do Brasil
+      --------------- ----------------------  ------------
+      Centro-Oeste          432.109.876.543         38.1%
+      ... (todas as 5 regiões)
+      Tempo: 0.8100s
+
+[5/5] Filtro 4 — Federal × Estadual × Municipal (Brasil)
+      Inspeção        Total de Cabeças  % do Total
+      ------------ ----------------------  ----------
+      Federal              876.543.210       72.5%
+      Estadual             234.567.890       19.4%
+      Municipal             98.765.432        8.1%
+      Tempo: 0.0010s
+
 ============================================================
    Resumo de Tempos
 ============================================================
@@ -124,52 +150,87 @@ Executa cada etapa de forma sequencial:
 
 ## paralelizado.py
 
-Mantém a mesma leitura serial (o gargalo de I/O de 2 GB é difícil de paralelizar sem aumentar a complexidade do código), mas **paraleliza o processamento dos filtros**.
+Roda **exatamente os mesmos 4 filtros do `serial.py`**, mas divide as linhas entre N threads. A cada rodada (2, 4, 6, 8 e 12 threads) os resultados completos são exibidos — iguais ao serial — seguidos do tempo gasto. Ao final, uma tabela compara o speedup entre as configurações.
 
 ### Como a paralelização funciona
 
-Após a leitura, as linhas em memória são divididas em **N fatias iguais**. Para cada fatia, são criadas threads para os 4 filtros simultaneamente:
+O arquivo é lido uma única vez. As linhas em memória são divididas em **N fatias iguais** e cada thread recebe sua fatia, rodando os 4 filtros de forma independente:
 
 ```
-rows_abatidos (21.951 linhas)
+21.951 linhas (abatidos) + 21.951 linhas (peso)
 │
-├── thread 0 → filtro_abate_estado(fatia 0)  ─┐
-├── thread 1 → filtro_abate_estado(fatia 1)   │ merge com Lock
-├── ...                                        │
-└── thread N → filtro_abate_estado(fatia N)  ─┘
-
-(mesmo padrão para filtros 2, 3 e 4 em paralelo)
+├── thread 0  →  worker(fatia 0)  →  resultados parciais [0]  ─┐
+├── thread 1  →  worker(fatia 1)  →  resultados parciais [1]   │ merge
+├── ...                                                         │ (soma os dicts)
+└── thread N  →  worker(fatia N)  →  resultados parciais [N]  ─┘
+                                           │
+                              exibir_resultados(r1, r2, r3, r4)
+                              (mesma saída do serial.py)
 ```
 
-Cada thread computa um dicionário parcial e usa um `threading.Lock` para acumular o resultado final com segurança.
+Cada thread escreve no **seu próprio índice** do array de resultados — sem `Lock`, sem condição de corrida. O merge acontece no thread principal depois que todas terminam.
 
-### Configurações de threads testadas
+### Saída esperada
 
-O script roda automaticamente para `N = 2, 4, 6, 8, 12` threads e exibe uma tabela de speedup:
+A cada rodada de N threads o script exibe os filtros completos e o tempo:
 
 ```
-=================================================================
-   Threads     Tempo (s)      Speedup
-   ------------------------------------
-         1        4.2100        1.00x
-         2        2.3800        1.77x
-         4        1.4200        2.96x
-         6        1.1500        3.66x
-         8        0.9800        4.30x
-        12        0.8900        4.73x
-=================================================================
+==============================================================
+   Rodada com 2 threads
+==============================================================
+
+  Filtro 1 — Abate por Estado
+  Estado                    Total de Cabeças  Rank
+  Mato Grosso                  1.234.567.890  #1
+  São Paulo                      987.654.321  #2
+  ... (todos os 27 estados)
+
+  Filtro 2 — Evolução Anual (Brasil)
+  1997          45.123.456             —
+  1998          47.890.123     +2.766.667
+  ... (todos os 29 anos)
+
+  Filtro 3 — Peso Total por Região (kg)
+  Centro-Oeste    432.109.876.543        38.1%
+  ... (todas as 5 regiões)
+
+  Filtro 4 — Federal × Estadual × Municipal
+  Federal       876.543.210       72.5%
+  ...
+
+  Tempo de processamento (2 threads): 2.3800s
+
+==============================================================
+   Rodada com 4 threads
+==============================================================
+  ... (mesmos resultados, mais rápido)
+  Tempo de processamento (4 threads): 1.4200s
+
+... (repete para 6, 8, 12 threads)
+
+==============================================================
+   Tabela de Speedup
+==============================================================
+  Threads     Tempo (s)     Speedup
+  --------  ------------  ----------
+         2        2.3800       1.00x
+         4        1.4200       1.68x
+         6        1.1500       2.07x
+         8        0.9800       2.43x
+        12        0.8900       2.67x
+==============================================================
 ```
 
 ### Por que o speedup não é linear?
 
-Em Python, o **GIL (Global Interpreter Lock)** impede que múltiplas threads executem bytecode Python ao mesmo tempo. Isso significa que o ganho com threads é real, mas limitado — especialmente em tarefas de CPU pura como parsing e soma de floats.
+Em Python, o **GIL (Global Interpreter Lock)** impede que múltiplas threads executem código Python ao mesmo tempo em paralelo real. O ganho existe, mas é limitado — especialmente em tarefas de CPU pura como parsing e soma de valores.
 
-Para obter speedup linear (escala próxima de N×), a alternativa em Python seria usar `multiprocessing` (processos separados, sem GIL compartilhado). O uso de `threading` aqui demonstra corretamente:
+Para escala próxima de N×, a alternativa seria `multiprocessing` (processos separados, sem GIL compartilhado). O uso de `threading` aqui demonstra corretamente:
 
 - Criação e gerenciamento de threads
-- Divisão de trabalho (particionamento de dados)
-- Sincronização com `Lock` para evitar condição de corrida
-- Medição e comparação de desempenho
+- Divisão de trabalho por particionamento de dados
+- Merge de resultados parciais sem condição de corrida
+- Medição e comparação de desempenho entre configurações
 
 ---
 
@@ -177,10 +238,10 @@ Para obter speedup linear (escala próxima de N×), a alternativa em Python seri
 
 | Conceito | Onde aparece |
 |---|---|
-| **Paralelismo de dados** | As linhas do CSV são divididas em N partes iguais entre as threads |
-| **Condição de corrida** | Seria gerada se threads escrevessem em `resultado` sem controle |
-| **Exclusão mútua (Lock)** | Cada filtro tem seu próprio `Lock` — threads acumulam o resultado parcial com segurança |
-| **Thread pool manual** | Lista de threads criadas, iniciadas e sincronizadas com `join()` |
-| **Speedup** | Medido como `tempo_1_thread / tempo_N_threads` |
-| **Overhead de thread** | Visível quando N alto tem ganho marginal menor que o esperado |
+| **Paralelismo de dados** | As linhas do CSV são divididas em N fatias iguais, cada thread processa a sua |
+| **Ausência de condição de corrida** | Cada thread escreve no seu próprio índice do array — sem memória compartilhada durante o processamento |
+| **Merge de resultados** | Após o `join()`, o thread principal soma os dicionários parciais de cada thread |
+| **Thread pool manual** | Threads criadas com `threading.Thread`, iniciadas com `.start()` e sincronizadas com `.join()` |
+| **Speedup** | Medido como `tempo_2_threads / tempo_N_threads` — exibido na tabela final |
+| **Overhead de thread** | Visível quando N alto tem ganho marginal menor que o esperado (custo de criação e sincronização) |
 # trabalho_materia_pdc_2bimestre
