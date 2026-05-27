@@ -1,0 +1,30 @@
+# Dados (arquivo muito grande para o git)
+tabela1092_2GB.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Ambientes virtuais
+venv/
+.venv/
+env/
+.env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Resultados / saídas geradas
+*.log
+resultados/
+output/
