@@ -90,53 +90,90 @@ Executa cada etapa de forma sequencial:
 
 **Saída esperada (exemplo):**
 ```
-============================================================
+==============================================================
    Análise Serial — Tabela 1092 IBGE
-============================================================
+==============================================================
 
 [1/5] Lendo arquivo...
-      21951 linhas (abatidos) | 21951 linhas (peso)
-      Tempo de leitura: 42.30s
+      Percorrendo o CSV de 2 GB e carregando apenas as duas seções
+      necessárias: 'Animais abatidos (Cabeças)' e
+      'Peso total das carcaças (Quilogramas)'.
+      -> 21.951 linhas carregadas para animais abatidos
+      -> 21.951 linhas carregadas para peso das carcaças
+      Tempo: 42.30s
 
 [2/5] Filtro 1 — Abate por Estado
+      Percorre todas as linhas no nível UF com inspeção Total.
+      Para cada estado, soma os abates mês a mês (3 meses × 4
+      trimestres × 29 anos = 348 leituras por linha) de 1997 a 2025.
 
-[3/5] Filtro 2 — Evolução Anual
+      -> 27 estados encontrados. Ranking por volume de abate:
 
-[4/5] Filtro 3 — Peso por Região
+      Estado                    Total de Cabeças  Rank
+      ------------------------- --------------------  ----
+      Mato Grosso                  1.234.567.890  #1
+      São Paulo                      987.654.321  #2
+      Mato Grosso do Sul             876.543.210  #3
+      ... (todos os 27 estados)
 
-[5/5] Filtro 4 — Federal × Estadual × Municipal
+      Tempo: 8.10s
 
-  Filtro 1 — Abate por Estado (cabeças, 1997–2025)
-  Estado                    Total de Cabeças  Rank
-  Mato Grosso                  1.234.567.890  #1
-  São Paulo                      987.654.321  #2
-  ... (todos os 27 estados)
+[3/5] Filtro 2 — Evolução Anual (Brasil)
+      Agrupa os abates mensais por ano para o nível Brasil,
+      inspeção Total. Calcula também a variação em relação ao
+      ano anterior para revelar tendências de crescimento ou queda.
 
-  Filtro 2 — Evolução Anual (Brasil)
-  Ano    Total de Cabeças  Var. s/ ano ant.
-  1997         45.123.456             —
-  1998         47.890.123     +2.766.667
-  ... (todos os 29 anos)
+      -> 29 anos analisados (1997–2025):
 
-  Filtro 3 — Peso Total por Região (kg)
-  Região          Peso Total (kg)  % do Brasil
-  Centro-Oeste    432.109.876.543        38.1%
-  ... (todas as 5 regiões)
+      Ano    Total de Cabeças  Var. s/ ano ant.
+      ------  --------------------  ----------------
+        1997        45.123.456             —
+        1998        47.890.123     +2.766.667
+        1999        46.500.000     -1.390.123
+        ... (todos os 29 anos)
 
-  Filtro 4 — Federal × Estadual × Municipal (Brasil)
-  Inspeção        Total de Cabeças  % do Total
-  Federal              876.543.210       72.5%
-  Estadual             234.567.890       19.4%
-  Municipal             98.765.432        8.1%
+      Tempo: 8.20s
 
-============================================================
+[4/5] Filtro 3 — Peso Total das Carcaças por Região (kg)
+      Usa a seção de peso das carcaças. Para cada estado (UF),
+      inspeção Total, soma o peso em kg mês a mês e agrupa
+      pelos 5 grupos regionais do Brasil.
+
+      -> 5 regiões | peso total acumulado: 1.234.567.890.123 kg
+
+      Região          Peso Total (kg)           % do Brasil
+      --------------- ----------------------  ------------
+      Centro-Oeste       432.109.876.543             38.1%
+      Sudeste            310.987.654.321             27.4%
+      Sul                210.123.456.789             18.5%
+      Nordeste            98.765.432.100              8.7%
+      Norte               82.345.678.901              7.3%
+
+      Tempo: 8.05s
+
+[5/5] Filtro 4 — Federal × Estadual × Municipal (Brasil)
+      Filtra as linhas do nível Brasil separadas por tipo de
+      inspeção sanitária (Federal, Estadual, Municipal).
+      Mostra qual esfera fiscalizou mais cabeças no período total.
+
+      -> total fiscalizado no período: 1.234.567.890 cabeças
+
+      Inspeção        Total de Cabeças  % do Total
+      ------------ ----------------------  ----------
+      Federal              876.543.210       72.5%
+      Estadual             234.567.890       19.4%
+      Municipal             98.765.432        8.1%
+
+      Tempo: 8.15s
+
+==============================================================
    Resumo de Tempos
-============================================================
+==============================================================
    Leitura do arquivo :    42.30s
    Filtro 1           :     8.10s
    Filtro 2           :     8.20s
    Filtro 3           :     8.05s
    Filtro 4           :     8.15s
    TOTAL              :    74.80s
-============================================================
+==============================================================
 ```

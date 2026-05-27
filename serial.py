@@ -80,6 +80,8 @@ def ler_secoes():
 
             # Strip aspas das colunas de metadado para comparações diretas
             row = linha.split(';')
+            if len(row) < 3:
+                continue
             row[0] = row[0].strip('"')   # nível:  BR / UF / MU
             row[1] = row[1].strip('"')   # local:  Brasil / São Paulo / ...
             row[2] = row[2].strip('"')   # inspeção: Total / Federal / ...
@@ -144,87 +146,104 @@ def filtro_inspecao(rows):
             result[row[2]] += sum(anuais.values())
     return result
 
-# ─── Exibição ─────────────────────────────────────────────────────────────────
-
-def exibir_resultados(r1, r2, r3, r4):
-    print("\n  Filtro 1 — Abate por Estado (cabeças, 1997–2025)")
-    print(f"  {'Estado':<25} {'Total de Cabeças':>20}  Rank")
-    print(f"  {'-'*25} {'-'*20}  ----")
-    for rank, (est, v) in enumerate(sorted(r1.items(), key=lambda x: -x[1]), 1):
-        print(f"  {est:<25} {v:>20,.0f}  #{rank}")
-
-    print("\n  Filtro 2 — Evolução Anual (Brasil)")
-    print(f"  {'Ano':>6}  {'Total de Cabeças':>20}  {'Var. s/ ano ant.':>16}")
-    print(f"  {'------':>6}  {'-'*20}  {'-'*16}")
-    anos = sorted(r2)
-    for i, ano in enumerate(anos):
-        v = r2[ano]
-        var = "    —" if i == 0 else f"{'+'if v-r2[anos[i-1]]>=0 else ''}{v-r2[anos[i-1]]:,.0f}"
-        print(f"  {ano:>6}  {v:>20,.0f}  {var:>16}")
-
-    print("\n  Filtro 3 — Peso Total por Região (kg)")
-    tg = sum(r3.values())
-    print(f"  {'Região':<15} {'Peso Total (kg)':>22}  {'% do Brasil':>12}")
-    print(f"  {'-'*15} {'-'*22}  {'-'*12}")
-    for reg, v in sorted(r3.items(), key=lambda x: -x[1]):
-        print(f"  {reg:<15} {v:>22,.0f}  {(v/tg*100) if tg else 0:>11.1f}%")
-
-    print("\n  Filtro 4 — Federal × Estadual × Municipal (Brasil)")
-    ti = sum(r4.values())
-    print(f"  {'Inspeção':<12} {'Total de Cabeças':>22}  {'% do Total':>10}")
-    print(f"  {'-'*12} {'-'*22}  {'-'*10}")
-    for tipo, v in sorted(r4.items(), key=lambda x: -x[1]):
-        print(f"  {tipo:<12} {v:>22,.0f}  {(v/ti*100) if ti else 0:>9.1f}%")
-
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    print("=" * 60)
+    print("=" * 62)
     print("   Análise Serial — Tabela 1092 IBGE")
-    print("=" * 60)
+    print("=" * 62)
 
     t0 = time.perf_counter()
 
+    # ── Leitura ───────────────────────────────────────────────────────────────
     print("\n[1/5] Lendo arquivo...")
+    print("      Percorrendo o CSV de 2 GB e carregando apenas as duas seções")
+    print("      necessárias: 'Animais abatidos (Cabeças)' e")
+    print("      'Peso total das carcaças (Quilogramas)'.")
     t_leit = time.perf_counter()
     rows_ab, rows_pe = ler_secoes()
     t_leit = time.perf_counter() - t_leit
-    print(f"      {len(rows_ab):,} linhas (abatidos) | {len(rows_pe):,} linhas (peso)")
-    print(f"      Tempo de leitura: {t_leit:.2f}s")
+    print(f"      -> {len(rows_ab):,} linhas carregadas para animais abatidos")
+    print(f"      -> {len(rows_pe):,} linhas carregadas para peso das carcaças")
+    print(f"      Tempo: {t_leit:.2f}s")
 
+    # ── Filtro 1 ──────────────────────────────────────────────────────────────
     print("\n[2/5] Filtro 1 — Abate por Estado")
+    print("      Percorre todas as linhas no nível UF com inspeção Total.")
+    print("      Para cada estado, soma os abates mês a mês (3 meses × 4")
+    print("      trimestres × 29 anos = 348 leituras por linha) de 1997 a 2025.")
     t = time.perf_counter()
     r1 = filtro_abate_por_estado(rows_ab)
     t1 = time.perf_counter() - t
+    print(f"\n      -> {len(r1)} estados encontrados. Ranking por volume de abate:\n")
+    print(f"      {'Estado':<25} {'Total de Cabeças':>20}  Rank")
+    print(f"      {'-'*25} {'-'*20}  ----")
+    for rank, (est, v) in enumerate(sorted(r1.items(), key=lambda x: -x[1]), 1):
+        print(f"      {est:<25} {v:>20,.0f}  #{rank}")
+    print(f"\n      Tempo: {t1:.2f}s")
 
-    print("\n[3/5] Filtro 2 — Evolução Anual")
+    # ── Filtro 2 ──────────────────────────────────────────────────────────────
+    print("\n[3/5] Filtro 2 — Evolução Anual (Brasil)")
+    print("      Agrupa os abates mensais por ano para o nível Brasil,")
+    print("      inspeção Total. Calcula também a variação em relação ao")
+    print("      ano anterior para revelar tendências de crescimento ou queda.")
     t = time.perf_counter()
     r2 = filtro_evolucao_por_ano(rows_ab)
     t2 = time.perf_counter() - t
+    anos = sorted(r2)
+    print(f"\n      -> {len(anos)} anos analisados ({anos[0]}–{anos[-1]}):\n")
+    print(f"      {'Ano':>6}  {'Total de Cabeças':>20}  {'Var. s/ ano ant.':>16}")
+    print(f"      {'------':>6}  {'-'*20}  {'-'*16}")
+    for i, ano in enumerate(anos):
+        v = r2[ano]
+        var = "    —" if i == 0 else f"{'+'if v-r2[anos[i-1]]>=0 else ''}{v-r2[anos[i-1]]:,.0f}"
+        print(f"      {ano:>6}  {v:>20,.0f}  {var:>16}")
+    print(f"\n      Tempo: {t2:.2f}s")
 
-    print("\n[4/5] Filtro 3 — Peso por Região")
+    # ── Filtro 3 ──────────────────────────────────────────────────────────────
+    print("\n[4/5] Filtro 3 — Peso Total das Carcaças por Região (kg)")
+    print("      Usa a seção de peso das carcaças. Para cada estado (UF),")
+    print("      inspeção Total, soma o peso em kg mês a mês e agrupa")
+    print("      pelos 5 grupos regionais do Brasil.")
     t = time.perf_counter()
     r3 = filtro_peso_por_regiao(rows_pe)
     t3 = time.perf_counter() - t
+    tg = sum(r3.values())
+    print(f"\n      -> {len(r3)} regiões | peso total acumulado: {tg:,.0f} kg\n")
+    print(f"      {'Região':<15} {'Peso Total (kg)':>22}  {'% do Brasil':>12}")
+    print(f"      {'-'*15} {'-'*22}  {'-'*12}")
+    for reg, v in sorted(r3.items(), key=lambda x: -x[1]):
+        print(f"      {reg:<15} {v:>22,.0f}  {(v/tg*100) if tg else 0:>11.1f}%")
+    print(f"\n      Tempo: {t3:.2f}s")
 
-    print("\n[5/5] Filtro 4 — Federal × Estadual × Municipal")
+    # ── Filtro 4 ──────────────────────────────────────────────────────────────
+    print("\n[5/5] Filtro 4 — Federal × Estadual × Municipal (Brasil)")
+    print("      Filtra as linhas do nível Brasil separadas por tipo de")
+    print("      inspeção sanitária (Federal, Estadual, Municipal).")
+    print("      Mostra qual esfera fiscalizou mais cabeças no período total.")
     t = time.perf_counter()
     r4 = filtro_inspecao(rows_ab)
     t4 = time.perf_counter() - t
+    ti = sum(r4.values())
+    print(f"\n      -> total fiscalizado no período: {ti:,.0f} cabeças\n")
+    print(f"      {'Inspeção':<12} {'Total de Cabeças':>22}  {'% do Total':>10}")
+    print(f"      {'-'*12} {'-'*22}  {'-'*10}")
+    for tipo, v in sorted(r4.items(), key=lambda x: -x[1]):
+        print(f"      {tipo:<12} {v:>22,.0f}  {(v/ti*100) if ti else 0:>9.1f}%")
+    print(f"\n      Tempo: {t4:.2f}s")
 
-    exibir_resultados(r1, r2, r3, r4)
-
+    # ── Resumo ────────────────────────────────────────────────────────────────
     total = time.perf_counter() - t0
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 62)
     print("   Resumo de Tempos")
-    print("=" * 60)
+    print("=" * 62)
     print(f"   Leitura do arquivo : {t_leit:>8.2f}s")
     print(f"   Filtro 1           : {t1:>8.2f}s")
     print(f"   Filtro 2           : {t2:>8.2f}s")
     print(f"   Filtro 3           : {t3:>8.2f}s")
     print(f"   Filtro 4           : {t4:>8.2f}s")
     print(f"   TOTAL              : {total:>8.2f}s")
-    print("=" * 60)
+    print("=" * 62)
 
 if __name__ == '__main__':
     main()
