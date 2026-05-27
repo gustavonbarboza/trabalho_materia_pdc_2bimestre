@@ -1,7 +1,7 @@
 import time
 from collections import defaultdict
 
-CSV_FILE     = 'tabela1092_2GB.csv'
+CSV_FILE     = 'tabela.csv'
 NUM_QUARTERS = 116          # Q1 1997 → Q4 2025
 START_YEAR   = 1997
 NUM_YEARS    = 29
