@@ -10,13 +10,13 @@ Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python
 
 **Fonte:** IBGE — *Número de informantes, Quantidade e Peso total das carcaças dos bovinos abatidos, no mês e no trimestre, por tipo de rebanho e tipo de inspeção.*
 
-> ⚠️ **O arquivo CSV não está incluso no repositório** (2 GB — acima do limite do Git).
-> Ele está disponível como asset na aba **[Releases](../../releases)** deste repositório.
+> ⚠️ **O arquivo CSV não está incluso no repositório** (8 GB — acima do limite do Git).
+> Ele está disponível como asset na aba **[Google Drive](google.com)** deste repositório.
 >
 > **Como obter:**
-> 1. Acesse a aba **Releases** e baixe o arquivo `.zip`
+> 1. Acesse o **[Google Drive](google.com)** e baixe o arquivo `.zip`
 > 2. Descompacte o zip
-> 3. Mova o arquivo `tabela1092_2GB.csv` para dentro desta pasta (raiz do projeto)
+> 3. Mova o arquivo `tabela.csv` para dentro desta pasta (raiz do projeto)
 > 4. Execute normalmente com `python3 serial.py`
 
 O arquivo contém 6 seções de variáveis, cada uma com dados trimestrais de **Q1 1997 a Q4 2025** (116 trimestres). Cada linha representa uma combinação de:
@@ -61,7 +61,7 @@ Compara o total de abates no Brasil separado por tipo de inspeção sanitária, 
 
 ```
 .
-├── tabela1092_2GB.csv   # dados brutos (IBGE)
+├── tabela.csv   # dados brutos (IBGE)
 ├── serial.py            # implementação serial
 └── README.md
 ```
@@ -95,7 +95,7 @@ Executa cada etapa de forma sequencial:
 ==============================================================
 
 [1/5] Lendo arquivo...
-      Percorrendo o CSV de 2 GB e carregando apenas as duas seções
+      Percorrendo o CSV de 8 GB e carregando apenas as duas seções
       necessárias: 'Animais abatidos (Cabeças)' e
       'Peso total das carcaças (Quilogramas)'.
       -> 21.951 linhas carregadas para animais abatidos
