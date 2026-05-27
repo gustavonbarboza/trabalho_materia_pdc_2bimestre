@@ -9,7 +9,7 @@ import threading
 from collections import defaultdict
 
 CSV_FILE      = 'tabela.csv'
-THREAD_COUNTS = [2, 4, 6, 8, 12]
+THREAD_COUNTS = [2, 4, 8, 12]
 
 NUM_QUARTERS = 116
 START_YEAR   = 1997
