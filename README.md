@@ -1,6 +1,6 @@
 # Trabalho 2º Bimestre — Programação Paralela e Concorrente
 
-Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python — implementação serial.
+Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python — implementação serial e paralelizada com threads.
 
 ---
 
@@ -61,8 +61,9 @@ Compara o total de abates no Brasil separado por tipo de inspeção sanitária, 
 
 ```
 .
-├── tabela.csv   # dados brutos (IBGE)
-├── serial.py            # implementação serial
+├── tabela.csv         # dados brutos (IBGE, 8 GB)
+├── serial.py          # implementação serial
+├── paralelizado.py    # implementação paralela com threads (2, 4, 6, 8, 12)
 └── README.md
 ```
 
@@ -73,20 +74,26 @@ Compara o total de abates no Brasil separado por tipo de inspeção sanitária, 
 > **Requisito:** Python 3.8+ (sem dependências externas — apenas biblioteca padrão)
 
 ```bash
+# Versão serial
 python3 serial.py
+
+# Versão paralelizada (roda automaticamente com 2, 4, 6, 8 e 12 threads)
+python3 paralelizado.py
 ```
 
-O script espera que o arquivo CSV esteja na mesma pasta de onde é executado.
+Os scripts esperam que o arquivo CSV esteja na mesma pasta de onde são executados.
 
 ---
 
-## serial.py
+## serial.py e paralelizado.py
 
-Executa cada etapa de forma sequencial:
+**`serial.py`** executa cada etapa de forma sequencial:
 
 1. **Leitura** — percorre o arquivo linha a linha, coletando apenas as duas seções relevantes na memória.
 2. **Filtro 1** → **Filtro 2** → **Filtro 3** → **Filtro 4**, um após o outro.
 3. Ao final, imprime os resultados e o tempo gasto em cada etapa.
+
+**`paralelizado.py`** faz a leitura uma única vez e roda os mesmos 4 filtros com 2, 4, 6, 8 e 12 threads. A cada rodada exibe o cabeçalho com o número de threads, os resultados completos de todos os filtros (idênticos ao serial) e o tempo de processamento. Ao final, exibe a tabela de speedup comparando as configurações.
 
 **Saída esperada (exemplo):**
 ```
@@ -169,11 +176,40 @@ Executa cada etapa de forma sequencial:
 ==============================================================
    Resumo de Tempos
 ==============================================================
-   Leitura do arquivo :    42.30s
-   Filtro 1           :     8.10s
-   Filtro 2           :     8.20s
-   Filtro 3           :     8.05s
-   Filtro 4           :     8.15s
-   TOTAL              :    74.80s
+   Leitura do arquivo :    --s
+   Filtro 1           :    --s
+   Filtro 2           :    --s
+   Filtro 3           :    --s
+   Filtro 4           :    --s
+   TOTAL              :    --s
 ==============================================================
 ```
+
+---
+
+## Resultados de Tempo
+
+> Preencher após rodar nos dois scripts na máquina de testes.
+
+### Tempos por configuração (segundos)
+
+| Configuração | Leitura (s) | Filtro 1 (s) | Filtro 2 (s) | Filtro 3 (s) | Filtro 4 (s) | Total (s) |
+|---|---|---|---|---|---|---|
+| Serial        | -- | -- | -- | -- | -- | -- |
+| 2 threads     | -- | --         | --         | --         | --         | -- |
+| 4 threads     | -- | --         | --         | --         | --         | -- |
+| 6 threads     | -- | --         | --         | --         | --         | -- |
+| 8 threads     | -- | --         | --         | --         | --         | -- |
+| 12 threads    | -- | --         | --         | --         | --         | -- |
+
+> Para o paralelizado, a leitura é feita uma única vez. Os filtros rodam em paralelo, então o tempo de processamento é o total das threads, não a soma individual.
+
+### Speedup (processamento)
+
+| Threads | Tempo proc. (s) | Speedup |
+|---|---|---|
+| 2  | -- | 1.00x |
+| 4  | -- | --x   |
+| 6  | -- | --x   |
+| 8  | -- | --x   |
+| 12 | -- | --x   |
