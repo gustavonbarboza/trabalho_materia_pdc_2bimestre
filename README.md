@@ -11,10 +11,10 @@ Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python
 **Fonte:** IBGE — *Número de informantes, Quantidade e Peso total das carcaças dos bovinos abatidos, no mês e no trimestre, por tipo de rebanho e tipo de inspeção.*
 
 > ⚠️ **O arquivo CSV não está incluso no repositório** (8 GB — acima do limite do Git).
-> Ele está disponível como asset na aba **[Google Drive](google.com)** deste repositório.
+> Ele está disponível como asset na aba **[Google Drive](https://drive.google.com/file/d/1j5z0Tstp23AOCbXARNGulNlY9LMYXGNC/view?usp=sharing)** deste repositório.
 >
 > **Como obter:**
-> 1. Acesse o **[Google Drive](google.com)** e baixe o arquivo `.zip`
+> 1. Acesse o **[Google Drive](https://drive.google.com/file/d/1j5z0Tstp23AOCbXARNGulNlY9LMYXGNC/view?usp=sharing)** e baixe o arquivo `.zip`
 > 2. Descompacte o zip
 > 3. Mova o arquivo `tabela.csv` para dentro desta pasta (raiz do projeto)
 > 4. Execute normalmente com `python3 serial.py`
