@@ -157,7 +157,7 @@ def main():
 
     # ── Leitura ───────────────────────────────────────────────────────────────
     print("\n[1/5] Lendo arquivo...")
-    print("      Percorrendo o CSV de 2 GB e carregando apenas as duas seções")
+    print("      Percorrendo o CSV de 8 GB e carregando apenas as duas seções")
     print("      necessárias: 'Animais abatidos (Cabeças)' e")
     print("      'Peso total das carcaças (Quilogramas)'.")
     t_leit = time.perf_counter()
