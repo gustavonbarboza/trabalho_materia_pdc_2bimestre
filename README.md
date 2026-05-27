@@ -6,7 +6,7 @@ Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python
 
 ## Dados
 
-**Arquivo:** `tabela1092_2GB.csv` (~2 GB, ~131.765 linhas)
+**Arquivo:** `tabela.csv`
 
 **Fonte:** IBGE — *Número de informantes, Quantidade e Peso total das carcaças dos bovinos abatidos, no mês e no trimestre, por tipo de rebanho e tipo de inspeção.*
 
