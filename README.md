@@ -93,7 +93,11 @@ Os scripts esperam que o arquivo CSV esteja na mesma pasta de onde são executad
 2. **Filtro 1** → **Filtro 2** → **Filtro 3** → **Filtro 4**, um após o outro.
 3. Ao final, imprime os resultados e o tempo gasto em cada etapa.
 
-**`paralelizado.py`** faz a leitura uma única vez e roda os mesmos 4 filtros com 2, 4, 8 e 12 threads. A cada rodada exibe o cabeçalho com o número de threads, os resultados completos de todos os filtros (idênticos ao serial) e o tempo de processamento. Ao final, exibe a tabela de speedup comparando as configurações.
+**`paralelizado.py`** faz a leitura uma única vez e roda os mesmos 4 filtros com 2, 4, 8 e 12 processos. A cada rodada exibe o cabeçalho com o número de processos, os resultados completos de todos os filtros (idênticos ao serial) e o tempo de processamento. Ao final, exibe a tabela de speedup comparando as configurações.
+
+> **Por que processos e não threads?**
+> Em Python, threads não paralelizam trabalho de CPU por causa do **GIL (Global Interpreter Lock)** — apenas uma thread executa código Python por vez. Para parsing e cálculo em 8 GB de dados, threads revezam em fila e o tempo praticamente não melhora.
+> `multiprocessing` cria processos independentes, cada um com seu próprio GIL, permitindo paralelismo real em múltiplos núcleos.
 
 **Saída esperada (exemplo):**
 ```
@@ -205,7 +209,7 @@ Os scripts esperam que o arquivo CSV esteja na mesma pasta de onde são executad
 
 ### Speedup (processamento)
 
-| Threads | Tempo proc. (s) | Speedup |
+| Processos | Tempo proc. (s) | Speedup |
 |---|---|---|
 | 2  | -- | 1.00x |
 | 4  | -- | --x   |

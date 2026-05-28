@@ -1,11 +1,17 @@
 """
 paralelizado.py
-Roda os mesmos 4 filtros do serial.py dividindo as linhas entre N threads.
-Para N = 2, 4, 6, 8, 12: exibe o cabeçalho da rodada, os resultados
-completos dos filtros e o tempo — igual ao serial, só mais rápido.
+
+NOTA: Em Python, threads (threading.Thread) NÃO paralelizam código CPU-bound
+porque o GIL (Global Interpreter Lock) permite que apenas uma thread execute
+código Python por vez. Para trabalho de CPU pura — como parsing e cálculo —
+threads revezam em fila em vez de rodar em paralelo.
+
+Este arquivo usa multiprocessing.Process: cada processo tem seu próprio
+interpretador e seu próprio GIL, permitindo paralelismo real em múltiplos
+núcleos do CPU.
 """
 import time
-import threading
+import multiprocessing as mp
 from collections import defaultdict
 
 CSV_FILE      = 'tabela.csv'
@@ -29,6 +35,10 @@ STATE_REGIONS = {
     'Goiás': 'Centro-Oeste',   'Distrito Federal': 'Centro-Oeste',
 }
 
+# ─── Globais compartilhados pelos processos via fork (sem cópia/pickling) ────
+_ROWS_AB = None
+_ROWS_PE = None
+
 # ─── Utilitários (idênticos ao serial) ───────────────────────────────────────
 
 def parse_val(s):
@@ -41,11 +51,6 @@ def parse_val(s):
         return 0.0
 
 def calcular_por_ano(row):
-    """
-    Soma os animais por ano usando os dados de CADA MÊS individualmente
-    (3 meses × 4 trimestres × 29 anos = 348 leituras por linha).
-    Coluna do mês M no trimestre Q:  3 + Q*24 + M*6   (M = 1, 2, 3)
-    """
     anuais = defaultdict(float)
     for y in range(NUM_YEARS):
         ano = START_YEAR + y
@@ -96,13 +101,18 @@ def ler_secoes():
 
     return rows_abatidos, rows_peso
 
-# ─── Worker: cada thread roda os 4 filtros na sua fatia ──────────────────────
+# ─── Worker: roda os 4 filtros na fatia deste processo ───────────────────────
 
-def worker(rows_ab, rows_pe, resultados, idx):
+def worker_pool(chunk):
     """
-    Recebe uma fatia de linhas e computa os 4 filtros de forma independente.
-    Cada thread escreve apenas no seu índice → sem Lock, sem condição de corrida.
+    Recebe os índices da sua fatia, acessa os dados via globals herdados
+    pelo fork (sem pickling da entrada) e retorna os 4 resultados parciais.
     """
+    start_ab, end_ab, start_pe, end_pe = chunk
+
+    rows_ab = _ROWS_AB[start_ab:end_ab]
+    rows_pe = _ROWS_PE[start_pe:end_pe]
+
     r1 = defaultdict(float)
     r2 = defaultdict(float)
     r3 = defaultdict(float)
@@ -128,30 +138,34 @@ def worker(rows_ab, rows_pe, resultados, idx):
             if regiao:
                 r3[regiao] += sum(anuais.values())
 
-    resultados[idx] = (r1, r2, r3, r4)
+    # Retorna dicts normais (pequenos — apenas ~30 chaves no total)
+    return dict(r1), dict(r2), dict(r3), dict(r4)
 
-# ─── Divisão e merge ─────────────────────────────────────────────────────────
+# ─── Divisão e execução paralela ─────────────────────────────────────────────
 
-def dividir(lst, n):
-    tam, inicio = len(lst), 0
+def calcular_chunks(total_ab, total_pe, n):
+    chunks = []
     for i in range(n):
-        fim = inicio + (tam - inicio) // (n - i)
-        yield lst[inicio:fim]
-        inicio = fim
+        s_ab = i * total_ab // n
+        e_ab = (i + 1) * total_ab // n if i < n - 1 else total_ab
+        s_pe = i * total_pe // n
+        e_pe = (i + 1) * total_pe // n if i < n - 1 else total_pe
+        chunks.append((s_ab, e_ab, s_pe, e_pe))
+    return chunks
 
-def rodar_com_n_threads(rows_ab, rows_pe, n):
-    fatias_ab  = list(dividir(rows_ab, n))
-    fatias_pe  = list(dividir(rows_pe, n))
-    resultados = [None] * n
+def rodar_com_n_processos(rows_ab, rows_pe, n):
+    global _ROWS_AB, _ROWS_PE
+    _ROWS_AB = rows_ab
+    _ROWS_PE = rows_pe
 
-    threads = [
-        threading.Thread(target=worker, args=(fatias_ab[i], fatias_pe[i], resultados, i))
-        for i in range(n)
-    ]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    chunks = calcular_chunks(len(rows_ab), len(rows_pe), n)
 
-    # Merge: soma os dicionários parciais de cada thread
+    # fork: processos herdam _ROWS_AB e _ROWS_PE sem copiar/serializar os dados
+    ctx = mp.get_context('fork')
+    with ctx.Pool(processes=n) as pool:
+        resultados = pool.map(worker_pool, chunks)
+
+    # Merge: soma os dicionários parciais de cada processo
     r1, r2, r3, r4 = (defaultdict(float) for _ in range(4))
     for p1, p2, p3, p4 in resultados:
         for k, v in p1.items(): r1[k] += v
@@ -163,8 +177,7 @@ def rodar_com_n_threads(rows_ab, rows_pe, n):
 
 # ─── Exibição dos filtros (idêntica ao serial) ────────────────────────────────
 
-def exibir_filtros(r1, r2, r3, r4, n_threads):
-    # Filtro 1
+def exibir_filtros(r1, r2, r3, r4):
     print("\n[2/5] Filtro 1 — Abate por Estado")
     print("      Percorre todas as linhas no nível UF com inspeção Total.")
     print("      Para cada estado, soma os abates mês a mês (3 meses × 4")
@@ -175,7 +188,6 @@ def exibir_filtros(r1, r2, r3, r4, n_threads):
     for rank, (est, v) in enumerate(sorted(r1.items(), key=lambda x: -x[1]), 1):
         print(f"      {est:<25} {v:>20,.0f}  #{rank}")
 
-    # Filtro 2
     print("\n[3/5] Filtro 2 — Evolução Anual (Brasil)")
     print("      Agrupa os abates mensais por ano para o nível Brasil,")
     print("      inspeção Total. Calcula também a variação em relação ao")
@@ -189,7 +201,6 @@ def exibir_filtros(r1, r2, r3, r4, n_threads):
         var = "    —" if i == 0 else f"{'+'if v-r2[anos[i-1]]>=0 else ''}{v-r2[anos[i-1]]:,.0f}"
         print(f"      {ano:>6}  {v:>20,.0f}  {var:>16}")
 
-    # Filtro 3
     print("\n[4/5] Filtro 3 — Peso Total das Carcaças por Região (kg)")
     print("      Usa a seção de peso das carcaças. Para cada estado (UF),")
     print("      inspeção Total, soma o peso em kg mês a mês e agrupa")
@@ -201,7 +212,6 @@ def exibir_filtros(r1, r2, r3, r4, n_threads):
     for reg, v in sorted(r3.items(), key=lambda x: -x[1]):
         print(f"      {reg:<15} {v:>22,.0f}  {(v/tg*100) if tg else 0:>11.1f}%")
 
-    # Filtro 4
     print("\n[5/5] Filtro 4 — Federal × Estadual × Municipal (Brasil)")
     print("      Filtra as linhas do nível Brasil separadas por tipo de")
     print("      inspeção sanitária (Federal, Estadual, Municipal).")
@@ -217,7 +227,7 @@ def exibir_filtros(r1, r2, r3, r4, n_threads):
 
 def main():
     print("=" * 62)
-    print("   Análise Paralela (Threads) — Tabela 1092 IBGE")
+    print("   Análise Paralela (Processos) — Tabela 1092 IBGE")
     print("=" * 62)
 
     # Leitura feita uma única vez, antes de todas as rodadas
@@ -236,19 +246,19 @@ def main():
 
     for n in THREAD_COUNTS:
         print(f"\n\n{'=' * 62}")
-        print(f"{'':^10}{'=' * 10}  {n} THREADS  {'=' * 10}")
+        print(f"{'=' * 20}  {n} PROCESSOS  {'=' * 20}")
         print(f"{'=' * 62}")
 
         t0 = time.perf_counter()
-        r1, r2, r3, r4 = rodar_com_n_threads(rows_ab, rows_pe, n)
+        r1, r2, r3, r4 = rodar_com_n_processos(rows_ab, rows_pe, n)
         t_proc = time.perf_counter() - t0
 
         tempos[n] = t_proc
 
-        exibir_filtros(r1, r2, r3, r4, n)
+        exibir_filtros(r1, r2, r3, r4)
 
         print(f"\n{'=' * 62}")
-        print(f"   Resumo — {n} threads")
+        print(f"   Resumo — {n} processos")
         print(f"{'=' * 62}")
         print(f"   Leitura (compartilhada) : {t_leit:>8.2f}s")
         print(f"   Processamento paralelo  : {t_proc:>8.2f}s")
@@ -260,11 +270,11 @@ def main():
     print(f"\n\n{'=' * 62}")
     print("   Comparativo de Speedup (processamento)")
     print(f"{'=' * 62}")
-    print(f"   {'Threads':>8}  {'Tempo proc. (s)':>16}  {'Speedup':>10}")
-    print(f"   {'-'*8}  {'-'*16}  {'-'*10}")
+    print(f"   {'Processos':>10}  {'Tempo proc. (s)':>16}  {'Speedup':>10}")
+    print(f"   {'-'*10}  {'-'*16}  {'-'*10}")
     for n in THREAD_COUNTS:
         sp = t_ref / tempos[n]
-        print(f"   {n:>8}  {tempos[n]:>16.2f}  {sp:>9.2f}x")
+        print(f"   {n:>10}  {tempos[n]:>16.2f}  {sp:>9.2f}x")
     print("=" * 62)
 
 if __name__ == '__main__':
