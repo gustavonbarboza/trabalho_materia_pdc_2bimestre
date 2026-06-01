@@ -1,14 +1,14 @@
 """
 paralelizado.py
 
-NOTA: Em Python, threads (threading.Thread) NÃO paralelizam código CPU-bound
+NOTA: Em Python, threads (threading.Thread) NAO paralelizam codigo CPU-bound
 porque o GIL (Global Interpreter Lock) permite que apenas uma thread execute
-código Python por vez. Para trabalho de CPU pura — como parsing e cálculo —
+codigo Python por vez. Para trabalho de CPU pura - como parsing e calculo -
 threads revezam em fila em vez de rodar em paralelo.
 
-Este arquivo usa multiprocessing.Process: cada processo tem seu próprio
-interpretador e seu próprio GIL, permitindo paralelismo real em múltiplos
-núcleos do CPU.
+Este arquivo usa multiprocessing.Pool: cada processo tem seu proprio
+interpretador e seu proprio GIL, permitindo paralelismo real em multiplos
+nucleos do CPU. Compativel com Windows, Linux e macOS.
 """
 import time
 import multiprocessing as mp
@@ -22,22 +22,25 @@ START_YEAR   = 1997
 NUM_YEARS    = 29
 
 STATE_REGIONS = {
-    'Rondônia': 'Norte',       'Acre': 'Norte',            'Amazonas': 'Norte',
-    'Roraima': 'Norte',        'Pará': 'Norte',             'Amapá': 'Norte',
+    'Rondonia': 'Norte',       'Acre': 'Norte',            'Amazonas': 'Norte',
+    'Roraima': 'Norte',        'Para': 'Norte',             'Amapa': 'Norte',
     'Tocantins': 'Norte',
-    'Maranhão': 'Nordeste',    'Piauí': 'Nordeste',         'Ceará': 'Nordeste',
-    'Rio Grande do Norte': 'Nordeste', 'Paraíba': 'Nordeste', 'Pernambuco': 'Nordeste',
+    'Maranhao': 'Nordeste',    'Piaui': 'Nordeste',         'Ceara': 'Nordeste',
+    'Rio Grande do Norte': 'Nordeste', 'Paraiba': 'Nordeste', 'Pernambuco': 'Nordeste',
     'Alagoas': 'Nordeste',     'Sergipe': 'Nordeste',       'Bahia': 'Nordeste',
-    'Minas Gerais': 'Sudeste', 'Espírito Santo': 'Sudeste', 'Rio de Janeiro': 'Sudeste',
-    'São Paulo': 'Sudeste',
-    'Paraná': 'Sul',           'Santa Catarina': 'Sul',     'Rio Grande do Sul': 'Sul',
+    'Minas Gerais': 'Sudeste', 'Espirito Santo': 'Sudeste', 'Rio de Janeiro': 'Sudeste',
+    'Sao Paulo': 'Sudeste',
+    'Parana': 'Sul',           'Santa Catarina': 'Sul',     'Rio Grande do Sul': 'Sul',
     'Mato Grosso do Sul': 'Centro-Oeste', 'Mato Grosso': 'Centro-Oeste',
-    'Goiás': 'Centro-Oeste',   'Distrito Federal': 'Centro-Oeste',
+    'Goias': 'Centro-Oeste',   'Distrito Federal': 'Centro-Oeste',
+    # Com acentos (caso o CSV use)
+    'Rondônia': 'Norte',       'Pará': 'Norte',             'Amapá': 'Norte',
+    'Maranhão': 'Nordeste',    'Piauí': 'Nordeste',         'Ceará': 'Nordeste',
+    'Paraíba': 'Nordeste',
+    'Espírito Santo': 'Sudeste','São Paulo': 'Sudeste',
+    'Paraná': 'Sul',
+    'Goiás': 'Centro-Oeste',
 }
-
-# ─── Globais compartilhados pelos processos via fork (sem cópia/pickling) ────
-_ROWS_AB = None
-_ROWS_PE = None
 
 # ─── Utilitários (idênticos ao serial) ───────────────────────────────────────
 
@@ -51,6 +54,11 @@ def parse_val(s):
         return 0.0
 
 def calcular_por_ano(row):
+    """
+    Soma os animais por ano usando os dados de CADA MES individualmente
+    (3 meses x 4 trimestres x 29 anos = 348 leituras por linha).
+    Coluna do mes M no trimestre Q:  3 + Q*24 + M*6   (M = 1, 2, 3)
+    """
     anuais = defaultdict(float)
     for y in range(NUM_YEARS):
         ano = START_YEAR + y
@@ -103,22 +111,20 @@ def ler_secoes():
 
 # ─── Worker: roda os 4 filtros na fatia deste processo ───────────────────────
 
-def worker_pool(chunk):
+def worker_pool(args):
     """
-    Recebe os índices da sua fatia, acessa os dados via globals herdados
-    pelo fork (sem pickling da entrada) e retorna os 4 resultados parciais.
+    Recebe a fatia de linhas deste processo e computa os 4 filtros.
+    Roda em paralelo com os outros processos em nucleos diferentes do CPU.
+    Retorna 4 dicionarios parciais que serao somados pelo processo principal.
     """
-    start_ab, end_ab, start_pe, end_pe = chunk
-
-    rows_ab = _ROWS_AB[start_ab:end_ab]
-    rows_pe = _ROWS_PE[start_pe:end_pe]
+    rows_ab_chunk, rows_pe_chunk = args
 
     r1 = defaultdict(float)
     r2 = defaultdict(float)
     r3 = defaultdict(float)
     r4 = defaultdict(float)
 
-    for row in rows_ab:
+    for row in rows_ab_chunk:
         anuais = calcular_por_ano(row)
 
         if row[0] == 'UF' and row[2] == 'Total':
@@ -131,7 +137,7 @@ def worker_pool(chunk):
         if row[0] == 'BR' and row[2] in ('Federal', 'Estadual', 'Municipal'):
             r4[row[2]] += sum(anuais.values())
 
-    for row in rows_pe:
+    for row in rows_pe_chunk:
         anuais = calcular_por_ano(row)
         if row[0] == 'UF' and row[2] == 'Total':
             regiao = STATE_REGIONS.get(row[1])
@@ -143,27 +149,21 @@ def worker_pool(chunk):
 
 # ─── Divisão e execução paralela ─────────────────────────────────────────────
 
-def calcular_chunks(total_ab, total_pe, n):
-    chunks = []
+def dividir(lst, n):
+    tam, inicio = len(lst), 0
     for i in range(n):
-        s_ab = i * total_ab // n
-        e_ab = (i + 1) * total_ab // n if i < n - 1 else total_ab
-        s_pe = i * total_pe // n
-        e_pe = (i + 1) * total_pe // n if i < n - 1 else total_pe
-        chunks.append((s_ab, e_ab, s_pe, e_pe))
-    return chunks
+        fim = inicio + (tam - inicio) // (n - i)
+        yield lst[inicio:fim]
+        inicio = fim
 
 def rodar_com_n_processos(rows_ab, rows_pe, n):
-    global _ROWS_AB, _ROWS_PE
-    _ROWS_AB = rows_ab
-    _ROWS_PE = rows_pe
+    chunks_ab = list(dividir(rows_ab, n))
+    chunks_pe = list(dividir(rows_pe, n))
 
-    chunks = calcular_chunks(len(rows_ab), len(rows_pe), n)
+    args = list(zip(chunks_ab, chunks_pe))
 
-    # fork: processos herdam _ROWS_AB e _ROWS_PE sem copiar/serializar os dados
-    ctx = mp.get_context('fork')
-    with ctx.Pool(processes=n) as pool:
-        resultados = pool.map(worker_pool, chunks)
+    with mp.Pool(processes=n) as pool:
+        resultados = pool.map(worker_pool, args)
 
     # Merge: soma os dicionários parciais de cada processo
     r1, r2, r3, r4 = (defaultdict(float) for _ in range(4))
@@ -179,46 +179,46 @@ def rodar_com_n_processos(rows_ab, rows_pe, n):
 
 def exibir_filtros(r1, r2, r3, r4):
     print("\n[2/5] Filtro 1 — Abate por Estado")
-    print("      Percorre todas as linhas no nível UF com inspeção Total.")
-    print("      Para cada estado, soma os abates mês a mês (3 meses × 4")
-    print("      trimestres × 29 anos = 348 leituras por linha) de 1997 a 2025.")
+    print("      Percorre todas as linhas no nivel UF com inspecao Total.")
+    print("      Para cada estado, soma os abates mes a mes (3 meses x 4")
+    print("      trimestres x 29 anos = 348 leituras por linha) de 1997 a 2025.")
     print(f"\n      -> {len(r1)} estados encontrados. Ranking por volume de abate:\n")
-    print(f"      {'Estado':<25} {'Total de Cabeças':>20}  Rank")
+    print(f"      {'Estado':<25} {'Total de Cabecas':>20}  Rank")
     print(f"      {'-'*25} {'-'*20}  ----")
     for rank, (est, v) in enumerate(sorted(r1.items(), key=lambda x: -x[1]), 1):
         print(f"      {est:<25} {v:>20,.0f}  #{rank}")
 
-    print("\n[3/5] Filtro 2 — Evolução Anual (Brasil)")
-    print("      Agrupa os abates mensais por ano para o nível Brasil,")
-    print("      inspeção Total. Calcula também a variação em relação ao")
-    print("      ano anterior para revelar tendências de crescimento ou queda.")
+    print("\n[3/5] Filtro 2 — Evolucao Anual (Brasil)")
+    print("      Agrupa os abates mensais por ano para o nivel Brasil,")
+    print("      inspecao Total. Calcula tambem a variacao em relacao ao")
+    print("      ano anterior para revelar tendencias de crescimento ou queda.")
     anos = sorted(r2)
-    print(f"\n      -> {len(anos)} anos analisados ({anos[0]}–{anos[-1]}):\n")
-    print(f"      {'Ano':>6}  {'Total de Cabeças':>20}  {'Var. s/ ano ant.':>16}")
+    print(f"\n      -> {len(anos)} anos analisados ({anos[0]}-{anos[-1]}):\n")
+    print(f"      {'Ano':>6}  {'Total de Cabecas':>20}  {'Var. s/ ano ant.':>16}")
     print(f"      {'------':>6}  {'-'*20}  {'-'*16}")
     for i, ano in enumerate(anos):
         v = r2[ano]
-        var = "    —" if i == 0 else f"{'+'if v-r2[anos[i-1]]>=0 else ''}{v-r2[anos[i-1]]:,.0f}"
+        var = "    -" if i == 0 else f"{'+'if v-r2[anos[i-1]]>=0 else ''}{v-r2[anos[i-1]]:,.0f}"
         print(f"      {ano:>6}  {v:>20,.0f}  {var:>16}")
 
-    print("\n[4/5] Filtro 3 — Peso Total das Carcaças por Região (kg)")
-    print("      Usa a seção de peso das carcaças. Para cada estado (UF),")
-    print("      inspeção Total, soma o peso em kg mês a mês e agrupa")
+    print("\n[4/5] Filtro 3 — Peso Total das Carcacas por Regiao (kg)")
+    print("      Usa a secao de peso das carcacas. Para cada estado (UF),")
+    print("      inspecao Total, soma o peso em kg mes a mes e agrupa")
     print("      pelos 5 grupos regionais do Brasil.")
     tg = sum(r3.values())
-    print(f"\n      -> {len(r3)} regiões | peso total acumulado: {tg:,.0f} kg\n")
-    print(f"      {'Região':<15} {'Peso Total (kg)':>22}  {'% do Brasil':>12}")
+    print(f"\n      -> {len(r3)} regioes | peso total acumulado: {tg:,.0f} kg\n")
+    print(f"      {'Regiao':<15} {'Peso Total (kg)':>22}  {'% do Brasil':>12}")
     print(f"      {'-'*15} {'-'*22}  {'-'*12}")
     for reg, v in sorted(r3.items(), key=lambda x: -x[1]):
         print(f"      {reg:<15} {v:>22,.0f}  {(v/tg*100) if tg else 0:>11.1f}%")
 
-    print("\n[5/5] Filtro 4 — Federal × Estadual × Municipal (Brasil)")
-    print("      Filtra as linhas do nível Brasil separadas por tipo de")
-    print("      inspeção sanitária (Federal, Estadual, Municipal).")
-    print("      Mostra qual esfera fiscalizou mais cabeças no período total.")
+    print("\n[5/5] Filtro 4 — Federal x Estadual x Municipal (Brasil)")
+    print("      Filtra as linhas do nivel Brasil separadas por tipo de")
+    print("      inspecao sanitaria (Federal, Estadual, Municipal).")
+    print("      Mostra qual esfera fiscalizou mais cabecas no periodo total.")
     ti = sum(r4.values())
-    print(f"\n      -> total fiscalizado no período: {ti:,.0f} cabeças\n")
-    print(f"      {'Inspeção':<12} {'Total de Cabeças':>22}  {'% do Total':>10}")
+    print(f"\n      -> total fiscalizado no periodo: {ti:,.0f} cabecas\n")
+    print(f"      {'Inspecao':<12} {'Total de Cabecas':>22}  {'% do Total':>10}")
     print(f"      {'-'*12} {'-'*22}  {'-'*10}")
     for tipo, v in sorted(r4.items(), key=lambda x: -x[1]):
         print(f"      {tipo:<12} {v:>22,.0f}  {(v/ti*100) if ti else 0:>9.1f}%")
@@ -227,19 +227,19 @@ def exibir_filtros(r1, r2, r3, r4):
 
 def main():
     print("=" * 62)
-    print("   Análise Paralela (Processos) — Tabela 1092 IBGE")
+    print("   Analise Paralela (Processos) - Tabela 1092 IBGE")
     print("=" * 62)
 
     # Leitura feita uma única vez, antes de todas as rodadas
     print("\n[1/5] Lendo arquivo...")
-    print("      Percorrendo o CSV de 8 GB e carregando apenas as duas seções")
-    print("      necessárias: 'Animais abatidos (Cabeças)' e")
-    print("      'Peso total das carcaças (Quilogramas)'.")
+    print("      Percorrendo o CSV de 8 GB e carregando apenas as duas secoes")
+    print("      necessarias: 'Animais abatidos (Cabecas)' e")
+    print("      'Peso total das carcacas (Quilogramas)'.")
     t_leit = time.perf_counter()
     rows_ab, rows_pe = ler_secoes()
     t_leit = time.perf_counter() - t_leit
     print(f"      -> {len(rows_ab):,} linhas carregadas para animais abatidos")
-    print(f"      -> {len(rows_pe):,} linhas carregadas para peso das carcaças")
+    print(f"      -> {len(rows_pe):,} linhas carregadas para peso das carcacas")
     print(f"      Tempo de leitura: {t_leit:.2f}s")
 
     tempos = {}
@@ -258,7 +258,7 @@ def main():
         exibir_filtros(r1, r2, r3, r4)
 
         print(f"\n{'=' * 62}")
-        print(f"   Resumo — {n} processos")
+        print(f"   Resumo - {n} processos")
         print(f"{'=' * 62}")
         print(f"   Leitura (compartilhada) : {t_leit:>8.2f}s")
         print(f"   Processamento paralelo  : {t_proc:>8.2f}s")
@@ -276,6 +276,7 @@ def main():
         sp = t_ref / tempos[n]
         print(f"   {n:>10}  {tempos[n]:>16.2f}  {sp:>9.2f}x")
     print("=" * 62)
+
 
 if __name__ == '__main__':
     main()
