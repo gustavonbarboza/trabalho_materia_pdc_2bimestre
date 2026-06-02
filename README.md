@@ -123,20 +123,33 @@ Executa cada etapa de forma sequencial:
 
 ---
 
-## Resultados de Tempo
+## Configuração da Máquina de Testes
 
-> Preencher após rodar os dois scripts na máquina de testes.
+| Componente | Especificação |
+|---|---|
+| **Processador** | Intel Core i5-12500 |
+| **Núcleos / Threads** | 6 núcleos físicos / 12 threads |
+| **RAM** | 16 GB |
+| **GPU** | Intel UHD Graphics 770 |
+| **Sistema Operacional** | Windows |
+| **Python** | 3.13 |
+
+> Os resultados de tempo abaixo foram medidos nesta máquina.
+
+---
+
+## Resultados de Tempo
 
 ### serial.py
 
 | Etapa | Tempo (s) |
 |---|---|
-| Leitura do arquivo | -- |
-| Filtro 1 | -- |
-| Filtro 2 | -- |
-| Filtro 3 | -- |
-| Filtro 4 | -- |
-| **TOTAL** | -- |
+| Leitura do arquivo | 118.05s |
+| Filtro 1 | 45.23s |
+| Filtro 2 | 33.23s |
+| Filtro 3 | 54.95s |
+| Filtro 4 | 54.66s |
+| **TOTAL** | 306.22s |
 
 ### paralelizado.py
 
@@ -144,10 +157,10 @@ O pré-scan é feito **uma única vez** antes de todas as rodadas. O tempo de pr
 
 | Configuração | Pré-scan (s) | Processamento (s) | Total (s) |
 |---|---|---|---|
-| 2 processos  | -- | -- | -- |
-| 4 processos  | -- | -- | -- |
-| 8 processos  | -- | -- | -- |
-| 12 processos | -- | -- | -- |
+| 2 processos  | 41.29s | 18.68s | 59.97s |
+| 4 processos  | 41.29s | 10.57s | 51.86s |
+| 8 processos  | 41.29s | 6.83s | 48.12s |
+| 12 processos | 41.29s | 6.16s | 47.45s |
 
 ### Speedup (processamento paralelo)
 
@@ -155,7 +168,7 @@ Base de comparação: configuração com 2 processos.
 
 | Processos | Tempo proc. (s) | Speedup |
 |---|---|---|
-| 2  | -- | 1.00x |
-| 4  | -- | --x   |
-| 8  | -- | --x   |
-| 12 | -- | --x   |
+| 2  | 18.68 | 1.00x |
+| 4  | 10.57 |  1.77x   |
+| 8  | 6.83 | 2.73x   |
+| 12 | 6.16 | 3.03x   |
