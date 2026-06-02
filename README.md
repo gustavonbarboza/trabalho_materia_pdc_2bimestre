@@ -1,6 +1,6 @@
 # Trabalho 2º Bimestre — Programação Paralela e Concorrente
 
-Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python — implementação serial e paralelizada com threads.
+Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python — implementação serial e paralelizada com processos.
 
 ---
 
@@ -11,10 +11,10 @@ Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python
 **Fonte:** IBGE — *Número de informantes, Quantidade e Peso total das carcaças dos bovinos abatidos, no mês e no trimestre, por tipo de rebanho e tipo de inspeção.*
 
 > ⚠️ **O arquivo CSV não está incluso no repositório** (8 GB — acima do limite do Git).
-> Ele está disponível como asset na aba **[Google Drive](https://drive.google.com/file/d/1j5z0Tstp23AOCbXARNGulNlY9LMYXGNC/view?usp=sharing)** deste repositório.
+> Disponível para download no **[Google Drive](https://drive.google.com/file/d/1j5z0Tstp23AOCbXARNGulNlY9LMYXGNC/view?usp=sharing)**.
 >
 > **Como obter:**
-> 1. Acesse o **[Google Drive](https://drive.google.com/file/d/1j5z0Tstp23AOCbXARNGulNlY9LMYXGNC/view?usp=sharing)** e baixe o arquivo `.zip`
+> 1. Acesse o link acima e baixe o arquivo `.zip`
 > 2. Descompacte o zip
 > 3. Mova o arquivo `tabela.csv` para dentro desta pasta (raiz do projeto)
 > 4. Execute normalmente com `python3 serial.py`
@@ -61,9 +61,9 @@ Compara o total de abates no Brasil separado por tipo de inspeção sanitária, 
 
 ```
 .
-├── tabela.csv         # dados brutos (IBGE, 8 GB)
+├── tabela.csv         # dados brutos (IBGE, 8 GB) — não versionado
 ├── serial.py          # implementação serial
-├── paralelizado.py    # implementação paralela com threads (2, 4, 6, 8, 12)
+├── paralelizado.py    # implementação paralela com processos (2, 4, 8, 12)
 └── README.md
 ```
 
@@ -77,137 +77,81 @@ Compara o total de abates no Brasil separado por tipo de inspeção sanitária, 
 # Versão serial
 python3 serial.py
 
-# Versão paralelizada (roda automaticamente com 2, 4, 6, 8 e 12 threads)
+# Versão paralelizada (roda automaticamente com 2, 4, 8 e 12 processos)
 python3 paralelizado.py
 ```
 
-Os scripts esperam que o arquivo CSV esteja na mesma pasta de onde são executados.
+Os scripts esperam que o arquivo `tabela.csv` esteja na mesma pasta de onde são executados.
 
 ---
 
 ## serial.py e paralelizado.py
 
-**`serial.py`** executa cada etapa de forma sequencial:
+### serial.py
+
+Executa cada etapa de forma sequencial:
 
 1. **Leitura** — percorre o arquivo linha a linha, coletando apenas as duas seções relevantes na memória.
 2. **Filtro 1** → **Filtro 2** → **Filtro 3** → **Filtro 4**, um após o outro.
-3. Ao final, imprime os resultados e o tempo gasto em cada etapa.
+3. Ao final, imprime os resultados e o tempo de cada etapa.
 
-**`paralelizado.py`** faz a leitura uma única vez e roda os mesmos 4 filtros com 2, 4, 8 e 12 processos. A cada rodada exibe o cabeçalho com o número de processos, os resultados completos de todos os filtros (idênticos ao serial) e o tempo de processamento. Ao final, exibe a tabela de speedup comparando as configurações.
+### paralelizado.py
 
 > **Por que processos e não threads?**
-> Em Python, threads não paralelizam trabalho de CPU por causa do **GIL (Global Interpreter Lock)** — apenas uma thread executa código Python por vez. Para parsing e cálculo em 8 GB de dados, threads revezam em fila e o tempo praticamente não melhora.
+> Em Python, threads não paralelizam trabalho de CPU por causa do **GIL (Global Interpreter Lock)** — apenas uma thread executa código Python por vez. Testado em máquina real: 2 threads = 135s, 4 = 130s, 8 = 138s, 12 = 143s. Praticamente sem melhora.
 > `multiprocessing` cria processos independentes, cada um com seu próprio GIL, permitindo paralelismo real em múltiplos núcleos.
 
-**Saída esperada (exemplo):**
+> **Por que os workers leem o arquivo diretamente?**
+> Passar os dados brutos entre processos exige serialização (pickle). Com ~1.2 GB de listas Python, o pickle trava o programa antes mesmo de começar a processar.
+> A solução: o processo principal faz um **pré-scan** do arquivo para registrar apenas os **offsets em bytes** de cada seção. Cada worker recebe 4 inteiros (~50 bytes via pickle) e abre o arquivo por conta própria, lendo só o seu trecho. Sem gargalo de serialização.
+
+**Fluxo do paralelizado.py:**
+
 ```
-==============================================================
-   Análise Serial — Tabela 1092 IBGE
-==============================================================
+[1] Pré-scan (~42s, único)
+    Leitura sequencial do CSV para encontrar os offsets em bytes
+    das seções 'Animais abatidos' e 'Peso das carcaças'.
 
-[1/5] Lendo arquivo...
-      Percorrendo o CSV de 8 GB e carregando apenas as duas seções
-      necessárias: 'Animais abatidos (Cabeças)' e
-      'Peso total das carcaças (Quilogramas)'.
-      -> 21.951 linhas carregadas para animais abatidos
-      -> 21.951 linhas carregadas para peso das carcaças
-      Tempo: 42.30s
+[2] Para cada N em [2, 4, 8, 12]:
+    ├── Divide cada seção em N fatias (alinhadas a linhas completas)
+    ├── Pool de N processos: cada um lê sua fatia do disco + calcula os 4 filtros
+    ├── Processo principal agrega os N resultados parciais
+    └── Exibe filtros + tempo de processamento paralelo
 
-[2/5] Filtro 1 — Abate por Estado
-      Percorre todas as linhas no nível UF com inspeção Total.
-      Para cada estado, soma os abates mês a mês (3 meses × 4
-      trimestres × 29 anos = 348 leituras por linha) de 1997 a 2025.
-
-      -> 27 estados encontrados. Ranking por volume de abate:
-
-      Estado                    Total de Cabeças  Rank
-      ------------------------- --------------------  ----
-      Mato Grosso                  1.234.567.890  #1
-      São Paulo                      987.654.321  #2
-      Mato Grosso do Sul             876.543.210  #3
-      ... (todos os 27 estados)
-
-      Tempo: 8.10s
-
-[3/5] Filtro 2 — Evolução Anual (Brasil)
-      Agrupa os abates mensais por ano para o nível Brasil,
-      inspeção Total. Calcula também a variação em relação ao
-      ano anterior para revelar tendências de crescimento ou queda.
-
-      -> 29 anos analisados (1997–2025):
-
-      Ano    Total de Cabeças  Var. s/ ano ant.
-      ------  --------------------  ----------------
-        1997        45.123.456             —
-        1998        47.890.123     +2.766.667
-        1999        46.500.000     -1.390.123
-        ... (todos os 29 anos)
-
-      Tempo: 8.20s
-
-[4/5] Filtro 3 — Peso Total das Carcaças por Região (kg)
-      Usa a seção de peso das carcaças. Para cada estado (UF),
-      inspeção Total, soma o peso em kg mês a mês e agrupa
-      pelos 5 grupos regionais do Brasil.
-
-      -> 5 regiões | peso total acumulado: 1.234.567.890.123 kg
-
-      Região          Peso Total (kg)           % do Brasil
-      --------------- ----------------------  ------------
-      Centro-Oeste       432.109.876.543             38.1%
-      Sudeste            310.987.654.321             27.4%
-      Sul                210.123.456.789             18.5%
-      Nordeste            98.765.432.100              8.7%
-      Norte               82.345.678.901              7.3%
-
-      Tempo: 8.05s
-
-[5/5] Filtro 4 — Federal × Estadual × Municipal (Brasil)
-      Filtra as linhas do nível Brasil separadas por tipo de
-      inspeção sanitária (Federal, Estadual, Municipal).
-      Mostra qual esfera fiscalizou mais cabeças no período total.
-
-      -> total fiscalizado no período: 1.234.567.890 cabeças
-
-      Inspeção        Total de Cabeças  % do Total
-      ------------ ----------------------  ----------
-      Federal              876.543.210       72.5%
-      Estadual             234.567.890       19.4%
-      Municipal             98.765.432        8.1%
-
-      Tempo: 8.15s
-
-==============================================================
-   Resumo de Tempos
-==============================================================
-   Leitura do arquivo :    --s
-   Filtro 1           :    --s
-   Filtro 2           :    --s
-   Filtro 3           :    --s
-   Filtro 4           :    --s
-   TOTAL              :    --s
-==============================================================
+[3] Tabela de speedup comparando as 4 configurações
 ```
 
 ---
 
 ## Resultados de Tempo
 
-> Preencher após rodar nos dois scripts na máquina de testes.
+> Preencher após rodar os dois scripts na máquina de testes.
 
-### Tempos por configuração (segundos)
+### serial.py
 
-| Configuração | Leitura (s) | Filtro 1 (s) | Filtro 2 (s) | Filtro 3 (s) | Filtro 4 (s) | Total (s) |
-|---|---|---|---|---|---|---|
-| Serial        | -- | -- | -- | -- | -- | -- |
-| 2 threads     | -- | --         | --         | --         | --         | -- |
-| 4 threads     | -- | --         | --         | --         | --         | -- |
-| 8 threads     | -- | --         | --         | --         | --         | -- |
-| 12 threads    | -- | --         | --         | --         | --         | -- |
+| Etapa | Tempo (s) |
+|---|---|
+| Leitura do arquivo | -- |
+| Filtro 1 | -- |
+| Filtro 2 | -- |
+| Filtro 3 | -- |
+| Filtro 4 | -- |
+| **TOTAL** | -- |
 
-> Para o paralelizado, a leitura é feita uma única vez. Os filtros rodam em paralelo, então o tempo de processamento é o total das threads, não a soma individual.
+### paralelizado.py
 
-### Speedup (processamento)
+O pré-scan é feito **uma única vez** antes de todas as rodadas. O tempo de processamento é o das N tarefas rodando em paralelo.
+
+| Configuração | Pré-scan (s) | Processamento (s) | Total (s) |
+|---|---|---|---|
+| 2 processos  | -- | -- | -- |
+| 4 processos  | -- | -- | -- |
+| 8 processos  | -- | -- | -- |
+| 12 processos | -- | -- | -- |
+
+### Speedup (processamento paralelo)
+
+Base de comparação: configuração com 2 processos.
 
 | Processos | Tempo proc. (s) | Speedup |
 |---|---|---|
