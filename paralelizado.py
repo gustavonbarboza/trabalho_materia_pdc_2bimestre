@@ -34,7 +34,13 @@ import multiprocessing as mp
 from collections import defaultdict
 
 CSV_FILE      = 'tabela.csv'
-THREAD_COUNTS = [2, 4, 8, 12]
+THREAD_COUNTS = [1, 2, 4, 8, 12]
+
+# Tempos medidos no serial.py na mesma maquina (atualizar se rodar em outro PC)
+# serial.py: leitura 118.05s | filtro1 45.23s | filtro2 33.23s | filtro3 54.95s | filtro4 54.66s
+SERIAL_LEITURA = 118.05   # segundos — leitura e armazenamento de todas as linhas na RAM
+SERIAL_PROC    = 188.07   # segundos — soma dos 4 filtros (45.23 + 33.23 + 54.95 + 54.66)
+SERIAL_TOTAL   = 306.22   # segundos — leitura + 4 filtros em sequencia
 
 NUM_QUARTERS = 116     # Q1 1997 -> Q4 2025
 START_YEAR   = 1997
@@ -385,17 +391,39 @@ def main():
         print(f"   TOTAL                   : {t_scan + t_proc:>8.2f}s")
         print(f"{'=' * 62}")
 
-    # Tabela de speedup — compara o tempo de processamento paralelo entre configs
-    t_ref = tempos[THREAD_COUNTS[0]]
+    # ── Tabela de Speedup ─────────────────────────────────────────────────────
+    # Referencia: 1 processo (paralelo desativado, mesmo algoritmo dos workers).
+    # Mostra como o tempo cai ao adicionar processos — e onde satura.
+    t_ref_proc  = tempos[1]           # processamento com 1 processo (baseline)
+    t_ref_total = t_scan + t_ref_proc # total com 1 processo
+
     print(f"\n\n{'=' * 62}")
-    print("   Comparativo de Speedup (tempo de processamento paralelo)")
-    print("   Base de comparacao: configuracao com 2 processos")
+    print("   Comparativo de Speedup — Total (leitura + processamento)")
     print(f"{'=' * 62}")
-    print(f"   {'Processos':>10}  {'Tempo proc. (s)':>16}  {'Speedup':>10}")
-    print(f"   {'-'*10}  {'-'*16}  {'-'*10}")
+    print(f"   {'Configuracao':<16}  {'Leitura (s)':>11}  {'Proc. (s)':>10}  {'Total (s)':>10}  {'Speedup':>8}")
+    print(f"   {'-'*16}  {'-'*11}  {'-'*10}  {'-'*10}  {'-'*8}")
+    print(f"   {'Serial':<16}  {SERIAL_LEITURA:>11.2f}  {SERIAL_PROC:>10.2f}  {SERIAL_TOTAL:>10.2f}  {'ref':>8}")
     for n in THREAD_COUNTS:
-        sp = t_ref / tempos[n]
-        print(f"   {n:>10}  {tempos[n]:>16.2f}  {sp:>9.2f}x")
+        total = t_scan + tempos[n]
+        sp    = SERIAL_TOTAL / total
+        print(f"   {f'{n} processo(s)':<16}  {t_scan:>11.2f}  {tempos[n]:>10.2f}  {total:>10.2f}  {sp:>7.2f}x")
+    print(f"{'=' * 62}")
+
+    # ── Gráfico ASCII de processamento paralelo ───────────────────────────────
+    BAR_MAX = 38
+    print(f"\n\n{'=' * 62}")
+    print("   Tempo de processamento por numero de processos")
+    print("   (quanto menor a barra, mais rapido — mostra onde satura)")
+    print(f"{'=' * 62}")
+    for n in THREAD_COUNTS:
+        t  = tempos[n]
+        sp = t_ref_proc / t
+        barra = '█' * max(1, round(t / t_ref_proc * BAR_MAX))
+        print(f"   {n:>2} proc  |{barra:<{BAR_MAX}}  {t:>6.2f}s  ({sp:.2f}x)")
+    print(f"{'=' * 62}")
+    print()
+    print("   Referencia: 1 processo = base 1.00x")
+    print(f"   Pre-scan fixo: {t_scan:.1f}s | Serial: {SERIAL_TOTAL:.1f}s")
     print("=" * 62)
 
 
