@@ -418,7 +418,7 @@ def main():
     for n in THREAD_COUNTS:
         t  = tempos[n]
         sp = t_ref_proc / t
-        barra = '█' * max(1, round(t / t_ref_proc * BAR_MAX))
+        barra = '#' * max(1, round(t / t_ref_proc * BAR_MAX))
         print(f"   {n:>2} proc  |{barra:<{BAR_MAX}}  {t:>6.2f}s  ({sp:.2f}x)")
     print(f"{'=' * 62}")
     print()
