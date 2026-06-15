@@ -149,53 +149,51 @@ Executa cada etapa de forma sequencial:
 
 ## Resultados de Tempo
 
-### serial.py
+### serial.py — 15/06/2026
 
 | Etapa | Tempo (s) |
 |---|---|
-| Leitura do arquivo | 118.05s |
-| Filtro 1 | 45.23s |
-| Filtro 2 | 33.23s |
-| Filtro 3 | 54.95s |
-| Filtro 4 | 54.66s |
-| **TOTAL** | 306.22s |
+| Leitura do arquivo | 135.12s |
+| Filtro 1 | 54.69s |
+| Filtro 2 | 31.82s |
+| Filtro 3 | 61.77s |
+| Filtro 4 | 49.89s |
+| **TOTAL** | **333.51s** |
 
-### paralelizado.py
+### paralelizado.py — 15/06/2026
 
 O pré-scan é feito **uma única vez** antes de todas as rodadas. O tempo de processamento é o das N tarefas rodando em paralelo.
 
 | Configuração | Pré-scan (s) | Processamento (s) | Total (s) |
 |---|---|---|---|
-| 2 processos  | 41.29s | 18.68s | 59.97s |
-| 4 processos  | 41.29s | 10.57s | 51.86s |
-| 8 processos  | 41.29s | 6.83s | 48.12s |
-| 12 processos | 41.29s | 6.16s | 47.45s |
+| 1 processo   | 44.60s | 35.08s | 79.68s |
+| 2 processos  | 44.60s | 18.61s | 63.21s |
+| 4 processos  | 44.60s | 10.45s | 55.05s |
+| 8 processos  | 44.60s |  6.79s | 51.38s |
+| 12 processos | 44.60s |  5.98s | 50.58s |
 
 ### Speedup — Total (leitura + processamento)
 
-Referência para o speedup paralelo: **1 processo** (mesmo algoritmo, sem paralelismo).
-Referência para speedup vs serial: **serial.py** (algoritmo diferente, 4 passes sobre os dados).
-
 | Configuração | Leitura (s) | Processamento (s) | Total (s) | Speedup vs Serial |
 |---|---|---|---|---|
-| Serial        | 118.05 | 188.07 | 306.22 | ref |
-| 1 processo    |  41.29 |   ~37  |  ~78   | ~3.9x |
-| 2 processos   |  41.29 |  18.68 |  59.97 | 5.11x |
-| 4 processos   |  41.29 |  10.57 |  51.86 | 5.90x |
-| 8 processos   |  41.29 |   6.83 |  48.12 | 6.36x |
-| 12 processos  |  41.29 |   6.16 |  47.45 | 6.45x |
+| Serial        | 135.12 | 198.17 | 333.51 | ref   |
+| 1 processo    |  44.60 |  35.08 |  79.68 | 4.19x |
+| 2 processos   |  44.60 |  18.61 |  63.21 | 5.28x |
+| 4 processos   |  44.60 |  10.45 |  55.05 | 6.06x |
+| 8 processos   |  44.60 |   6.79 |  51.38 | 6.49x |
+| 12 processos  |  44.60 |   5.98 |  50.58 | 6.59x |
 
-### Speedup de Processamento (referência: 1 processo)
+### Speedup de Processamento (referência: 1 processo = 35.08s)
 
 | Processos | Tempo proc. (s) | Speedup |
 |---|---|---|
-| 1  | ~37   | 1.00x |
-| 2  | 18.68 | ~2.0x |
-| 4  | 10.57 | ~3.5x |
-| 8  | 6.83  | ~5.4x |
-| 12 | 6.16  | ~6.0x |
+| 1  | 35.08 | 1.00x |
+| 2  | 18.61 | 1.88x |
+| 4  | 10.45 | 3.36x |
+| 8  |  6.79 | 5.17x |
+| 12 |  5.98 | 5.86x |
 
-> **Por que a leitura do paralelo (41s) é mais rápida que a do serial (118s)?**
+> **Por que a leitura do paralelo (44s) é mais rápida que a do serial (135s)?**
 > O pré-scan apenas registra os offsets em bytes — não armazena linhas na RAM.
 > O serial carrega 86.864 linhas × ~2.800 colunas de strings Python na memória.
 

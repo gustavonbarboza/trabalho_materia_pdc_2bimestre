@@ -1,0 +1,138 @@
+Script           : serial.py
+Data de execucao : 15/06/2026
+==============================================================
+
+==============================================================
+   An�lise Serial � Tabela 1092 IBGE
+==============================================================
+
+[1/5] Lendo arquivo...
+      Percorrendo o CSV de 8 GB e carregando apenas as duas se��es
+      necess�rias: 'Animais abatidos (Cabe�as)' e
+      'Peso total das carca�as (Quilogramas)'.
+      -> 86,864 linhas carregadas para animais abatidos
+      -> 86,864 linhas carregadas para peso das carca�as
+      Tempo: 135.12s
+
+[2/5] Filtro 1 � Abate por Estado
+      Percorre todas as linhas no n�vel UF com inspe��o Total.
+      Para cada estado, soma os abates m�s a m�s (3 meses � 4
+      trimestres � 29 anos = 348 leituras por linha) de 1997 a 2025.
+
+      -> 27 estados encontrados. Ranking por volume de abate:
+
+      Estado                        Total de Cabe�as  Rank
+      ------------------------- --------------------  ----
+      Mato Grosso                        122,762,054  #1
+      S�o Paulo                           99,540,469  #2
+      Mato Grosso do Sul                  99,224,097  #3
+      Goi�s                               82,319,353  #4
+      Minas Gerais                        67,817,041  #5
+      Par�                                60,983,839  #6
+      Rond�nia                            50,100,480  #7
+      Rio Grande do Sul                   48,672,862  #8
+      Paran�                              36,212,305  #9
+      Bahia                               27,310,750  #10
+      Tocantins                           26,350,853  #11
+      Maranh�o                            17,694,406  #12
+      Santa Catarina                      11,429,642  #13
+      Acre                                10,201,127  #14
+      Pernambuco                           9,385,709  #15
+      Esp�rito Santo                       7,574,735  #16
+      Cear�                                7,561,179  #17
+      Rio de Janeiro                       4,210,543  #18
+      Alagoas                              4,183,911  #19
+      Amazonas                             4,052,145  #20
+      Piau�                                3,745,560  #21
+      Rio Grande do Norte                  2,403,450  #22
+      Sergipe                              2,303,079  #23
+      Para�ba                              1,567,637  #24
+      Roraima                              1,446,643  #25
+      Distrito Federal                       233,475  #26
+      Amap�                                   60,864  #27
+
+      Tempo: 54.69s
+
+[3/5] Filtro 2 � Evolu��o Anual (Brasil)
+      Agrupa os abates mensais por ano para o n�vel Brasil,
+      inspe��o Total. Calcula tamb�m a varia��o em rela��o ao
+      ano anterior para revelar tend�ncias de crescimento ou queda.
+
+      -> 29 anos analisados (1997�2025):
+
+         Ano      Total de Cabe�as  Var. s/ ano ant.
+      ------  --------------------  ----------------
+        1997            14,886,260                 �
+        1998            14,906,476           +20,216
+        1999            16,787,016        +1,880,540
+        2000            17,085,581          +298,565
+        2001            18,436,299        +1,350,718
+        2002            19,924,046        +1,487,747
+        2003            21,644,403        +1,720,357
+        2004            25,936,697        +4,292,294
+        2005            28,030,409        +2,093,712
+        2006            30,373,560        +2,343,151
+        2007            30,712,914          +339,354
+        2008            28,700,370        -2,012,544
+        2009            28,062,688          -637,682
+        2010            29,278,095        +1,215,407
+        2011            28,823,944          -454,151
+        2012            31,118,740        +2,294,796
+        2013            34,412,070        +3,293,330
+        2014            33,907,718          -504,352
+        2015            30,651,802        -3,255,916
+        2016            29,702,048          -949,754
+        2017            30,866,663        +1,164,615
+        2018            32,042,688        +1,176,025
+        2019            32,445,850          +403,162
+        2020            29,887,036        -2,558,814
+        2021            27,704,853        -2,182,183
+        2022            29,947,584        +2,242,731
+        2023            34,101,806        +4,154,222
+        2024            39,689,184        +5,587,378
+        2025            42,935,146        +3,245,962
+
+      Tempo: 31.82s
+
+[4/5] Filtro 3 � Peso Total das Carca�as por Regi�o (kg)
+      Usa a se��o de peso das carca�as. Para cada estado (UF),
+      inspe��o Total, soma o peso em kg m�s a m�s e agrupa
+      pelos 5 grupos regionais do Brasil.
+
+      -> 5 regi�es | peso total acumulado: 196,848,109,012 kg
+
+      Regi�o                 Peso Total (kg)   % do Brasil
+      --------------- ----------------------  ------------
+      Centro-Oeste            76,057,045,496         38.6%
+      Sudeste                 44,147,994,809         22.4%
+      Norte                   37,105,321,815         18.8%
+      Sul                     21,944,611,950         11.1%
+      Nordeste                17,593,134,942          8.9%
+
+      Tempo: 61.77s
+
+[5/5] Filtro 4 � Federal � Estadual � Municipal (Brasil)
+      Filtra as linhas do n�vel Brasil separadas por tipo de
+      inspe��o sanit�ria (Federal, Estadual, Municipal).
+      Mostra qual esfera fiscalizou mais cabe�as no per�odo total.
+
+      -> total fiscalizado no per�odo: 813,001,946 cabe�as
+
+      Inspe��o           Total de Cabe�as  % do Total
+      ------------ ----------------------  ----------
+      Federal                 613,702,051       75.5%
+      Estadual                146,809,321       18.1%
+      Municipal                52,490,574        6.5%
+
+      Tempo: 49.89s
+
+==============================================================
+   Resumo de Tempos
+==============================================================
+   Leitura do arquivo :   135.12s
+   Filtro 1           :    54.69s
+   Filtro 2           :    31.82s
+   Filtro 3           :    61.77s
+   Filtro 4           :    49.89s
+   TOTAL              :   333.51s
+==============================================================

@@ -37,10 +37,10 @@ CSV_FILE      = 'tabela.csv'
 THREAD_COUNTS = [1, 2, 4, 8, 12]
 
 # Tempos medidos no serial.py na mesma maquina (atualizar se rodar em outro PC)
-# serial.py: leitura 118.05s | filtro1 45.23s | filtro2 33.23s | filtro3 54.95s | filtro4 54.66s
-SERIAL_LEITURA = 118.05   # segundos — leitura e armazenamento de todas as linhas na RAM
-SERIAL_PROC    = 188.07   # segundos — soma dos 4 filtros (45.23 + 33.23 + 54.95 + 54.66)
-SERIAL_TOTAL   = 306.22   # segundos — leitura + 4 filtros em sequencia
+# serial.py: leitura 135.12s | filtro1 54.69s | filtro2 31.82s | filtro3 61.77s | filtro4 49.89s
+SERIAL_LEITURA = 135.12   # segundos — leitura e armazenamento de todas as linhas na RAM
+SERIAL_PROC    = 198.17   # segundos — soma dos 4 filtros (54.69 + 31.82 + 61.77 + 49.89)
+SERIAL_TOTAL   = 333.51   # segundos — leitura + 4 filtros em sequencia
 
 NUM_QUARTERS = 116     # Q1 1997 -> Q4 2025
 START_YEAR   = 1997
