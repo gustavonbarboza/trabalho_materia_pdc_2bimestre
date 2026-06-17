@@ -74,11 +74,8 @@ STATE_REGIONS = {
 # ─── Utilitários (idênticos ao serial) ───────────────────────────────────────
 
 def _decode(raw_bytes):
-    """Decodifica bytes para string, com fallback para latin-1."""
-    try:
-        return raw_bytes.decode('utf-8').rstrip('\n')
-    except UnicodeDecodeError:
-        return raw_bytes.decode('latin-1').rstrip('\n')
+    # latin-1 aceita qualquer byte sem levantar excecao — evita overhead de try/except
+    return raw_bytes.decode('latin-1').rstrip('\n')
 
 def parse_val(s):
     s = s.strip().strip('"')
@@ -215,6 +212,8 @@ def worker_pool(args):
     r3 = defaultdict(float)   # peso por regiao
     r4 = defaultdict(float)   # tipo de inspecao
 
+    _inspecoes_br = frozenset(('Federal', 'Estadual', 'Municipal'))
+
     # ── Seção abatidos ────────────────────────────────────────────────────────
     with open(csv_file, 'rb') as f:
         f.seek(ab_start)
@@ -228,21 +227,29 @@ def worker_pool(args):
             row = linha.split(';')
             if len(row) < 3:
                 continue
-            row[0] = row[0].strip('"')
-            row[1] = row[1].strip('"')
-            row[2] = row[2].strip('"')
+            nivel = row[0].strip('"')
+            local = row[1].strip('"')
+            insp  = row[2].strip('"')
 
+            # Filtra ANTES do calcular_por_ano — evita 348 parse_val por linha descartada
+            uf_total = nivel == 'UF' and insp == 'Total'
+            br_total = nivel == 'BR' and insp == 'Total'
+            br_insp  = nivel == 'BR' and insp in _inspecoes_br
+            if not (uf_total or br_total or br_insp):
+                continue
+
+            row[0] = nivel
+            row[1] = local
+            row[2] = insp
             anuais = calcular_por_ano(row)
 
-            if row[0] == 'UF' and row[2] == 'Total':
-                r1[row[1]] += sum(anuais.values())
-
-            if row[0] == 'BR' and row[2] == 'Total':
+            if uf_total:
+                r1[local] += sum(anuais.values())
+            if br_total:
                 for ano, v in anuais.items():
                     r2[ano] += v
-
-            if row[0] == 'BR' and row[2] in ('Federal', 'Estadual', 'Municipal'):
-                r4[row[2]] += sum(anuais.values())
+            if br_insp:
+                r4[insp] += sum(anuais.values())
 
     # ── Seção peso ────────────────────────────────────────────────────────────
     with open(csv_file, 'rb') as f:
@@ -257,15 +264,23 @@ def worker_pool(args):
             row = linha.split(';')
             if len(row) < 3:
                 continue
-            row[0] = row[0].strip('"')
-            row[1] = row[1].strip('"')
-            row[2] = row[2].strip('"')
+            nivel = row[0].strip('"')
+            insp  = row[2].strip('"')
 
+            # Filtra ANTES do calcular_por_ano
+            if nivel != 'UF' or insp != 'Total':
+                continue
+
+            local = row[1].strip('"')
+            regiao = STATE_REGIONS.get(local)
+            if not regiao:
+                continue
+
+            row[0] = nivel
+            row[1] = local
+            row[2] = insp
             anuais = calcular_por_ano(row)
-            if row[0] == 'UF' and row[2] == 'Total':
-                regiao = STATE_REGIONS.get(row[1])
-                if regiao:
-                    r3[regiao] += sum(anuais.values())
+            r3[regiao] += sum(anuais.values())
 
     return dict(r1), dict(r2), dict(r3), dict(r4)
 
