@@ -1,6 +1,6 @@
 # Trabalho 2º Bimestre — Programação Paralela e Concorrente
 
-Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python — implementação serial e paralelizada com processos.
+Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python — implementação paralelizada com processos.
 
 ---
 
@@ -17,7 +17,7 @@ Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python
 > 1. Acesse o link acima e baixe o arquivo `.zip`
 > 2. Descompacte o zip
 > 3. Mova o arquivo `tabela.csv` para dentro desta pasta (raiz do projeto)
-> 4. Execute normalmente com `python3 serial.py`
+> 4. Execute com `python3 paralelizado.py`
 
 O arquivo contém 6 seções de variáveis, cada uma com dados trimestrais de **Q1 1997 a Q4 2025** (116 trimestres). Cada linha representa uma combinação de:
 
@@ -62,11 +62,8 @@ Compara o total de abates no Brasil separado por tipo de inspeção sanitária, 
 ```
 .
 ├── tabela.csv              # dados brutos (IBGE, 8 GB) — não versionado
-├── serial.py               # implementação serial
 ├── paralelizado.py         # implementação paralela com processos (1, 2, 4, 8, 12)
-├── rodar.py                # executa os dois scripts e salva os resultados
-├── evidencias/             # saídas geradas automaticamente pelo rodar.py
-│   ├── saida_serial_YYYY-MM-DD.txt
+├── evidencias/             # saídas de execuções anteriores
 │   └── saida_paralelizado_YYYY-MM-DD.txt
 └── README.md
 ```
@@ -78,33 +75,14 @@ Compara o total de abates no Brasil separado por tipo de inspeção sanitária, 
 > **Requisito:** Python 3.8+ (sem dependências externas — apenas biblioteca padrão)
 
 ```bash
-# Roda os dois scripts em sequência e salva os resultados em evidencias/
-python3 rodar.py
-
-# Ou rodar individualmente:
-python3 serial.py
 python3 paralelizado.py
 ```
 
-Os scripts esperam que o arquivo `tabela.csv` esteja na mesma pasta de onde são executados.
-
-### rodar.py
-
-Executa `serial.py` e `paralelizado.py` em sequência, exibe a saída em tempo real no terminal e salva cada resultado em `evidencias/` com a data do dia no nome do arquivo (ex.: `saida_serial_2026-06-01.txt`). Se rodar duas vezes no mesmo dia, sobrescreve o arquivo do dia. Se rodar em outro dia, cria um arquivo novo — o histórico fica preservado.
+O script espera que o arquivo `tabela.csv` esteja na mesma pasta de onde é executado.
 
 ---
 
-## serial.py e paralelizado.py
-
-### serial.py
-
-Executa cada etapa de forma sequencial:
-
-1. **Leitura** — percorre o arquivo linha a linha, coletando apenas as duas seções relevantes na memória.
-2. **Filtro 1** → **Filtro 2** → **Filtro 3** → **Filtro 4**, um após o outro.
-3. Ao final, imprime os resultados e o tempo de cada etapa.
-
-### paralelizado.py
+## paralelizado.py
 
 > **Por que processos e não threads?**
 > Em Python, threads não paralelizam trabalho de CPU por causa do **GIL (Global Interpreter Lock)** — apenas uma thread executa código Python por vez. Testado em máquina real: 2 threads = 135s, 4 = 130s, 8 = 138s, 12 = 143s. Praticamente sem melhora.
@@ -114,20 +92,24 @@ Executa cada etapa de forma sequencial:
 > Passar os dados brutos entre processos exige serialização (pickle). Com ~1.2 GB de listas Python, o pickle trava o programa antes mesmo de começar a processar.
 > A solução: o processo principal faz um **pré-scan** do arquivo para registrar apenas os **offsets em bytes** de cada seção. Cada worker recebe 4 inteiros (~50 bytes via pickle) e abre o arquivo por conta própria, lendo só o seu trecho. Sem gargalo de serialização.
 
+> **Por que filtrar antes de calcular?**
+> A função `calcular_por_ano` executa 348 leituras de coluna por linha. O código anterior chamava essa função para **todas** as linhas da seção e só depois descartava as irrelevantes (nível `MU`, inspeções não usadas). O filtro agora é aplicado **antes** do cálculo: linhas que não contribuem para nenhum resultado recebem um `continue` imediato, eliminando o trabalho desnecessário e reduzindo significativamente o tempo de processamento por processo.
+
 **Fluxo do paralelizado.py:**
 
 ```
-[1] Pré-scan (~42s, único)
+[1] Pré-scan (~41s, único)
     Leitura sequencial do CSV para encontrar os offsets em bytes
     das seções 'Animais abatidos' e 'Peso das carcaças'.
 
-[2] Para cada N em [2, 4, 8, 12]:
+[2] Para cada N em [1, 2, 4, 8, 12]:
     ├── Divide cada seção em N fatias (alinhadas a linhas completas)
     ├── Pool de N processos: cada um lê sua fatia do disco + calcula os 4 filtros
+    │   (apenas linhas relevantes são processadas — filtro antecipado)
     ├── Processo principal agrega os N resultados parciais
     └── Exibe filtros + tempo de processamento paralelo
 
-[3] Tabela de speedup comparando as 4 configurações
+[3] Tabela de speedup comparando as 5 configurações
 ```
 
 ---
@@ -149,7 +131,7 @@ Executa cada etapa de forma sequencial:
 
 ## Resultados de Tempo
 
-### serial.py — 15/06/2026
+### Referência Serial (medido antes da otimização)
 
 | Etapa | Tempo (s) |
 |---|---|
@@ -160,43 +142,41 @@ Executa cada etapa de forma sequencial:
 | Filtro 4 | 49.89s |
 | **TOTAL** | **333.51s** |
 
-### paralelizado.py — 15/06/2026
+### paralelizado.py — 18/06/2026
 
 O pré-scan é feito **uma única vez** antes de todas as rodadas. O tempo de processamento é o das N tarefas rodando em paralelo.
 
 | Configuração | Pré-scan (s) | Processamento (s) | Total (s) |
 |---|---|---|---|
-| 1 processo   | 44.60s | 35.08s | 79.68s |
-| 2 processos  | 44.60s | 18.61s | 63.21s |
-| 4 processos  | 44.60s | 10.45s | 55.05s |
-| 8 processos  | 44.60s |  6.79s | 51.38s |
-| 12 processos | 44.60s |  5.98s | 50.58s |
+| 1 processo   | 41.41 | 14.53 | 55.94 |
+| 2 processos  | 41.41 |  7.60 | 49.01 |
+| 4 processos  | 41.41 |  4.58 | 45.99 |
+| 8 processos  | 41.41 |  2.87 | 44.29 |
+| 12 processos | 41.41 |  2.31 | 43.73 |
 
 ### Speedup — Total (leitura + processamento)
 
 | Configuração | Leitura (s) | Processamento (s) | Total (s) | Speedup vs Serial |
 |---|---|---|---|---|
-| Serial        | 135.12 | 198.17 | 333.51 | ref   |
-| 1 processo    |  44.60 |  35.08 |  79.68 | 4.19x |
-| 2 processos   |  44.60 |  18.61 |  63.21 | 5.28x |
-| 4 processos   |  44.60 |  10.45 |  55.05 | 6.06x |
-| 8 processos   |  44.60 |   6.79 |  51.38 | 6.49x |
-| 12 processos  |  44.60 |   5.98 |  50.58 | 6.59x |
+| (Setial)      |  41.41 |  14.53 |  55.94 | 5.96x |
+| 2 processos   |  41.41 |   7.60 |  49.01 | 6.80x |
+| 4 processos   |  41.41 |   4.58 |  45.99 | 7.25x |
+| 8 processos   |  41.41 |   2.87 |  44.29 | 7.53x |
+| 12 processos  |  41.41 |   2.31 |  43.73 | 7.63x |
 
-### Speedup de Processamento (referência: 1 processo = 35.08s)
+### Speedup de Processamento (referência: 1 processo = 14.53s)
 
 | Processos | Tempo proc. (s) | Speedup |
 |---|---|---|
-| 1  | 35.08 | 1.00x |
-| 2  | 18.61 | 1.88x |
-| 4  | 10.45 | 3.36x |
-| 8  |  6.79 | 5.17x |
-| 12 |  5.98 | 5.86x |
+| 1  | 14.53 | 1.00x |
+| 2  |  7.60 | 1.91x |
+| 4  |  4.58 | 3.17x |
+| 8  |  2.87 | 5.06x |
+| 12 |  2.31 | 6.28x |
 
-> **Por que a leitura do paralelo (44s) é mais rápida que a do serial (135s)?**
+> **Por que a leitura do paralelo (41s) é mais rápida que a do serial (135s)?**
 > O pré-scan apenas registra os offsets em bytes — não armazena linhas na RAM.
-> O serial carrega 86.864 linhas × ~2.800 colunas de strings Python na memória.
+> O serial carregava 86.864 linhas × ~2.800 colunas de strings Python na memória.
 
-> **Por que o speedup satura em ~6x com 8–12 processos?**
-> O i5-12500 tem **6 núcleos físicos**. Até 4–6 processos o ganho é quase linear.
-> Com 8+ processos, os núcleos extras compartilham os mesmos núcleos físicos via hyperthreading — e o disco começa a ser o gargalo com múltiplos leitores simultâneos.
+> **Por que o speedup satura em ~7.6x com 12 processos?**
+> O i5-12500 tem **6 núcleos físicos**. Com 8+ processos os núcleos extras compartilham os mesmos núcleos físicos via hyperthreading — e o disco passa a ser o gargalo com múltiplos leitores simultâneos. O pré-scan fixo de ~41s também limita o speedup total pelo limite de Amdahl.
