@@ -1,4 +1,4 @@
-# Trabalho 2º Bimestre — Programação Paralela e Concorrente
+# Trabalho 2º Bimestre — Programação Paralela e Distribuída
 
 Análise de dados do abate bovino no Brasil (IBGE — Tabela 1092) usando Python — implementação paralelizada com processos.
 
