@@ -158,7 +158,7 @@ O pré-scan é feito **uma única vez** antes de todas as rodadas. O tempo de pr
 
 | Configuração | Leitura (s) | Processamento (s) | Total (s) | Speedup vs Serial |
 |---|---|---|---|---|
-| (Setial)      |  41.41 |  14.53 |  55.94 | 5.96x |
+| (Serial)      |  41.41 |  14.53 |  55.94 | 5.96x |
 | 2 processos   |  41.41 |   7.60 |  49.01 | 6.80x |
 | 4 processos   |  41.41 |   4.58 |  45.99 | 7.25x |
 | 8 processos   |  41.41 |   2.87 |  44.29 | 7.53x |
