@@ -119,7 +119,7 @@ O script espera que o arquivo `tabela.csv` esteja na mesma pasta de onde é exec
 | Componente | Especificação |
 |---|---|
 | **Processador** | Intel Core i5-12500 |
-| **Núcleos / Threads** | 6 núcleos físicos / 12 threads |
+| **Núcleos / Threads** | 12 núcleos físicos / 20 threads |
 | **RAM** | 16 GB |
 | **GPU** | Intel UHD Graphics 770 |
 | **Sistema Operacional** | Windows |
