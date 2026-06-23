@@ -9,7 +9,7 @@ Análise paralela de 8 GB de dados de abate bovino do IBGE (Tabela 1092) — esc
 | **Alunos** | Felipe (RA 078364) · Gustavo (RA 077030) |
 | **Professor** | Rafael Marconi |
 | **Disciplina** | Programação Concorrente e Distribuída — 2º Bimestre 2026 |
-| **Speedup máximo** | **7.63×** vs. execução serial |
+| **Speedup máximo** | **6.29×** de processamento (12 processos vs. 1 processo) |
 
 ---
 
@@ -36,7 +36,7 @@ Cloud cobra por hora de máquina e por GB processado. Banco de dados precisa de 
 O jeito normal de paralelizar em Python (mandar os dados entre processos) **estoura a RAM** e o programa morre. Acontece de verdade, o tempo todo, com gente que tenta. A nossa lê direto do disco — funciona num PC de 16 GB processando um arquivo de 8 GB, que tecnicamente "não caberia".
 
 **3. É rápido o suficiente pra ser usável.**
-45 segundos em vez de 5 minutos e meio (serial) muda o comportamento de quem usa: vira algo que você roda **várias vezes**, testando perguntas diferentes, sem cafezinho no meio. Velocidade não é vaidade — é o que torna a ferramenta prática.
+~44 segundos com 12 processos muda o comportamento de quem usa: vira algo que você roda **várias vezes**, testando perguntas diferentes, sem cafezinho no meio. Velocidade não é vaidade — é o que torna a ferramenta prática.
 
 ---
 
@@ -184,10 +184,10 @@ Em Python, o **GIL (Global Interpreter Lock)** permite que apenas **uma thread e
 Testado em máquina real com `threading.Thread`:
 
 ```
-2 threads  →  135s   (mesmo que serial)
+2 threads  →  135s   (sem ganho)
 4 threads  →  130s
 8 threads  →  138s
-12 threads →  143s   (pior que serial — overhead de troca)
+12 threads →  143s   (pior ainda — overhead de troca)
 ```
 
 `multiprocessing` cria processos **independentes**, cada um com seu próprio interpretador e seu próprio GIL. Resultado: paralelismo real em núcleos físicos distintos da CPU.
@@ -340,36 +340,23 @@ Municipal  |██████▌                                               
 
 ## Resultados de Tempo e Speedup
 
-### Referência — Execução Serial (15/06/2026)
+### Execução Paralela (18/06/2026)
 
-Implementação serial equivalente: lê todo o CSV para a RAM e processa os filtros um a um.
-
-```
-Etapa               Tempo (s)
-------------------- ---------
-Leitura do arquivo   135.12 s   ← carrega 86.864 linhas × ~2.800 colunas na RAM
-Filtro 1              54.69 s
-Filtro 2              31.82 s
-Filtro 3              61.77 s
-Filtro 4              49.89 s
-─────────────────── ---------
-TOTAL                333.51 s   (~5m 33s)
-```
-
-### Execução Paralela (18/06/2026, após otimização do filtro antecipado)
-
-O pré-scan é feito **uma única vez** antes de todas as rodadas paralelas.
+O pré-scan é feito **uma única vez** antes de todas as rodadas. A referência de speedup é **1 processo** — o mesmo algoritmo rodando sem paralelismo.
 
 ```
-Configuração    Pré-scan (s)   Proc. (s)   Total (s)   Speedup vs Serial
---------------  ------------   ---------   ---------   -----------------
-Serial               135.12      198.17      333.51           ref
-1 processo            41.41       14.53       55.94          5.96×
-2 processos           41.41        7.60       49.01          6.80×
-4 processos           41.41        4.58       45.99          7.25×
-8 processos           41.41        2.87       44.29          7.53×
-12 processos          41.41        2.31       43.73          7.63×
+Configuração    Pré-scan (s)   Proc. (s)   Total (s)   Speedup proc.   Speedup total
+--------------  ------------   ---------   ---------   -------------   -------------
+1 processo            41.41       14.53       55.94        ref (1.00×)     ref (1.00×)
+2 processos           41.41        7.60       49.01           1.91×           1.14×
+4 processos           41.41        4.58       45.99           3.17×           1.22×
+8 processos           41.41        2.87       44.29           5.06×           1.26×
+12 processos          41.41        2.31       43.73           6.29×           1.28×
 ```
+
+> **Speedup proc.** = ganho na fase paralela (14.53s → 2.31s).
+> **Speedup total** = ganho no tempo total incluindo o pré-scan fixo de 41.41s.
+> O pré-scan domina o tempo total — por isso o speedup total satura em ~1.28×.
 
 ### Composição do tempo total (pré-scan + processamento)
 
@@ -436,12 +423,13 @@ Quatro causas físicas convergem:
 
 O pré-scan serial de **41.41s** não encolhe com mais processos. Com 12 processos, ele representa **94.7% do tempo total**.
 
-**Teto teórico de Amdahl:**
+**Teto teórico de Amdahl** (usando 1 processo como base):
 ```
-Teto = Tempo Serial Total / Parte Serial Não-Paralelizável
-Teto = 333.51 / 41.41 = 8.05×
+Teto total = T_1proc / T_prescan = 55.94 / 41.41 = 1.35×
 ```
-Já alcançamos **7.63× = 95% do teto teórico** — o gargalo é o pré-scan, não bug ou má implementação.
+Já alcançamos **1.28× = 95% do teto** — o gargalo é o pré-scan fixo, não bug ou má implementação.
+
+O processamento em si escala bem: **6.29× com 12 processos** (14.53s → 2.31s), mas como representa apenas ~26% do tempo total, o impacto no resultado final é limitado.
 
 ### Causa 2 — Pré-scan é I/O-bound ← dominante
 
@@ -460,7 +448,6 @@ Todos os núcleos disputam o **mesmo barramento de RAM**. Criar milhões de obje
 ```
                    pré-scan (fixo)       processamento paralelo
                    ───────────────────── ──────────────────────
-Serial (333.5s)    [████ leitura ████████][████ F1 ████][██ F2 ██][████ F3 ████][███ F4 ███]
 1 processo (55.9s) [█████████████████████][█████████████]
 2 processos (49s)  [█████████████████████][███████]
 4 processos (46s)  [█████████████████████][████]
@@ -494,9 +481,7 @@ Para ir além de ~44s o gargalo a atacar é o **pré-scan I/O-bound de 41s**, n�
 ├── paralelizado.py         # implementação paralela com processos (1, 2, 4, 8, 12)
 ├── evidencias/             # saídas de execuções anteriores
 │   ├── saida_paralelizado_2026-06-01.txt
-│   ├── saida_paralelizado_2026-06-15.txt
-│   ├── saida_serial_2026-06-01.txt
-│   └── saida_serial_2026-06-15.txt
+│   └── saida_paralelizado_2026-06-15.txt
 ├── prints/                 # gráficos de desempenho
 │   ├── composicao_tempo.png
 │   ├── speedup_total.png
@@ -526,8 +511,8 @@ Para ir além de ~44s o gargalo a atacar é o **pré-scan I/O-bound de 41s**, n�
 
 ## Conclusão
 
-- **7.63× de speedup total** com 12 processos vs. execução serial (333.51s → 43.73s)
+- **6.29× de speedup de processamento** com 12 processos vs. 1 processo (14.53s → 2.31s)
+- **1.28× de speedup total** — limitado pelo pré-scan fixo de 41.41s que representa 95% do teto de Amdahl
 - **96% de eficiência com 2 processos** — o ponto de melhor custo-benefício
-- O teto está a **95% do limite de Amdahl (8.05×)** — o gargalo é o pré-scan serial de 41s, não bug ou má implementação
-- O processamento paralelo em si escala bem (6.29× com 12 processos), mas agora representa apenas ~5% do tempo total
+- O teto de Amdahl (1.35×) já está 95% alcançado — o gargalo é o pré-scan fixo, não bug ou má implementação
 - **Romper o teto exige distribuir o I/O ou reduzir os bytes lidos** — não mais processos na mesma máquina

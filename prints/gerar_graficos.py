@@ -12,16 +12,14 @@ import numpy as np
 OUT = "."
 
 # ── Dados ─────────────────────────────────────────────────────────────────────
-processos   = [1, 2, 4, 8, 12]
-tempo_proc  = [14.53, 7.60, 4.58, 2.87, 2.31]
-tempo_total = [55.94, 49.01, 45.99, 44.29, 43.73]
-speedup_tot = [5.96, 6.80, 7.25, 7.53, 7.63]
-speedup_proc= [1.00, 1.91, 3.17, 5.06, 6.29]
-eficiencia  = [100, 96, 79, 63, 52]
+processos    = [1, 2, 4, 8, 12]
+tempo_proc   = [14.53, 7.60, 4.58, 2.87, 2.31]
+tempo_total  = [55.94, 49.01, 45.99, 44.29, 43.73]
+speedup_tot  = [1.00, 55.94/49.01, 55.94/45.99, 55.94/44.29, 55.94/43.73]
+speedup_proc = [1.00, 1.91, 3.17, 5.06, 6.29]
+eficiencia   = [100, 96, 79, 63, 52]
 
-SERIAL_TOTAL = 333.51
-SERIAL_PROC  = 198.17
-PRESCAN      = 41.41
+PRESCAN = 41.41
 
 DARK  = "#0D1B3E"
 MINT  = "#4DFFA0"
@@ -57,8 +55,9 @@ plt.rcParams.update(STYLE)
 fig, ax = plt.subplots(figsize=(9, 5))
 ax.plot(processos, speedup_tot, color=MINT, marker="o", linewidth=2.5,
         markersize=8, markerfacecolor=DARK, markeredgewidth=2, zorder=3)
-ax.axhline(8.05, color=YEL, linewidth=1.2, linestyle="--", alpha=0.7)
-ax.text(11.5, 8.12, "teto de Amdahl\n8.05×", color=YEL, fontsize=9, ha="right")
+# Teto de Amdahl: T_1proc / T_prescan = 55.94 / 41.41 = 1.35×
+ax.axhline(1.35, color=YEL, linewidth=1.2, linestyle="--", alpha=0.7)
+ax.text(11.5, 1.355, "teto de Amdahl\n1.35×", color=YEL, fontsize=9, ha="right")
 
 for x, y in zip(processos, speedup_tot):
     ax.annotate(f"{y:.2f}×", (x, y), textcoords="offset points",
@@ -67,12 +66,13 @@ for x, y in zip(processos, speedup_tot):
 
 ax.fill_between(processos, speedup_tot, alpha=0.08, color=MINT)
 ax.set_xlabel("Número de processos", fontsize=11)
-ax.set_ylabel("Speedup vs. execução serial", fontsize=11)
-ax.set_title("Speedup Total — Paralelo vs. Serial (333.51s)", fontsize=13, fontweight="bold", pad=14)
+ax.set_ylabel("Speedup total (base: 1 processo = 55.94s)", fontsize=11)
+ax.set_title("Speedup Total — referência: 1 processo (55.94s)", fontsize=13, fontweight="bold", pad=14)
 ax.set_xticks(processos)
-ax.set_yticks([1, 2, 3, 4, 5, 6, 7, 7.63, 8.05])
-ax.set_yticklabels(["1×", "2×", "3×", "4×", "5×", "6×", "7×", "7.63×", "8.05×"])
-ax.set_ylim(4.5, 9.0)
+ticks = [1.00, 1.10, 1.20, 1.28, 1.35]
+ax.set_yticks(ticks)
+ax.set_yticklabels([f"{t:.2f}×" for t in ticks])
+ax.set_ylim(0.95, 1.45)
 ax.grid(True, axis="y")
 ax.spines[["top", "right"]].set_visible(False)
 fig.tight_layout()
@@ -145,28 +145,28 @@ print("eficiencia.png ✓")
 # ─────────────────────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(9, 5))
 
-configs  = ["Serial", "1 proc", "2 proc", "4 proc", "8 proc", "12 proc"]
-prescan  = [135.12,   41.41,  41.41,  41.41,  41.41,  41.41]
-proc_t   = [198.17,   14.53,   7.60,   4.58,   2.87,   2.31]
+configs  = ["1 proc\n(ref)", "2 proc", "4 proc", "8 proc", "12 proc"]
+prescan  = [41.41,  41.41,  41.41,  41.41,  41.41]
+proc_t   = [14.53,   7.60,   4.58,   2.87,   2.31]
 x = np.arange(len(configs))
 w = 0.5
 
-b1 = ax.bar(x, prescan, w, label="Leitura / Pré-scan", color=BLUE, zorder=3)
+b1 = ax.bar(x, prescan, w, label="Pré-scan (fixo)", color=BLUE, zorder=3)
 b2 = ax.bar(x, proc_t,  w, bottom=prescan, label="Processamento paralelo", color=MINT, zorder=3)
 
 # Total labels on top
 for xi, ps, pt in zip(x, prescan, proc_t):
     total = ps + pt
-    ax.text(xi, total + 4, f"{total:.1f}s", ha="center", va="bottom",
-            fontsize=9, color=WHITE, fontweight="bold")
+    ax.text(xi, total + 0.8, f"{total:.1f}s", ha="center", va="bottom",
+            fontsize=10, color=WHITE, fontweight="bold")
 
 ax.set_xticks(x)
 ax.set_xticklabels(configs)
 ax.set_ylabel("Tempo (s)", fontsize=11)
-ax.set_title("Composição do Tempo Total por Configuração\n(leitura/pré-scan + processamento)", fontsize=12, fontweight="bold", pad=12)
+ax.set_title("Composição do Tempo Total por Configuração\n(pré-scan fixo + processamento paralelo)", fontsize=12, fontweight="bold", pad=12)
 ax.legend(loc="upper right", fontsize=10, facecolor="#0F2248",
           edgecolor="#1E3A6E", labelcolor=WHITE)
-ax.set_ylim(0, 390)
+ax.set_ylim(0, 68)
 ax.grid(True, axis="y")
 ax.spines[["top", "right"]].set_visible(False)
 fig.tight_layout()
