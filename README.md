@@ -344,15 +344,15 @@ Municipal  |██████▌                                               
 
 O pré-scan é feito **uma única vez** antes de todas as rodadas. A referência de speedup é **1 processo** — o mesmo algoritmo rodando sem paralelismo.
 
-```
-Configuração    Pré-scan (s)   Proc. (s)   Total (s)   Speedup proc.   Speedup total
---------------  ------------   ---------   ---------   -------------   -------------
-1 processo            41.41       14.53       55.94        ref (1.00×)     ref (1.00×)
-2 processos           41.41        7.60       49.01           1.91×           1.14×
-4 processos           41.41        4.58       45.99           3.17×           1.22×
-8 processos           41.41        2.87       44.29           5.06×           1.26×
-12 processos          41.41        2.31       43.73           6.29×           1.28×
-```
+![Tabela de resultados](prints/tabela_resultados.png)
+
+| Configuração | Pré-scan (s) | Proc. (s) | Total (s) | Speedup proc. | Speedup total |
+|:---|---:|---:|---:|---:|---:|
+| **1 processo** | 41.41 | 14.53 | 55.94 | ref (1.00×) | ref (1.00×) |
+| **2 processos** | 41.41 | 7.60 | 49.01 | **1.91×** | 1.14× |
+| **4 processos** | 41.41 | 4.58 | 45.99 | **3.17×** | 1.22× |
+| **8 processos** | 41.41 | 2.87 | 44.29 | **5.06×** | 1.26× |
+| **12 processos** | 41.41 | 2.31 | 43.73 | **6.29×** | 1.28× |
 
 > **Speedup proc.** = ganho na fase paralela (14.53s → 2.31s).
 > **Speedup total** = ganho no tempo total incluindo o pré-scan fixo de 41.41s.
@@ -390,6 +390,8 @@ Ideal = 100% (speedup linear)
 ```
 
 ### Tabela de Eficiência — Processamento Paralelo
+
+![Tabela de eficiência](prints/tabela_eficiencia.png)
 
 | Processos | Tempo (s) | Speedup | Eficiência | Interpretação |
 |:---------:|----------:|--------:|-----------:|---|
@@ -482,13 +484,16 @@ Para ir além de ~44s o gargalo a atacar é o **pré-scan I/O-bound de 41s**, n�
 ├── evidencias/             # saídas de execuções anteriores
 │   ├── saida_paralelizado_2026-06-01.txt
 │   └── saida_paralelizado_2026-06-15.txt
-├── prints/                 # gráficos de desempenho
+├── prints/                 # gráficos e tabelas de desempenho
 │   ├── composicao_tempo.png
 │   ├── speedup_total.png
 │   ├── speedup_processamento.png
 │   ├── tempo_processamento.png
 │   ├── eficiencia.png
-│   └── gerar_graficos.py   # script para regenerar os gráficos
+│   ├── tabela_resultados.png
+│   ├── tabela_eficiencia.png
+│   ├── gerar_graficos.py   # script para regenerar os gráficos
+│   └── gerar_tabelas.py    # script para regenerar as tabelas
 └── README.md
 ```
 
